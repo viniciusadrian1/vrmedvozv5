@@ -3,758 +3,424 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AR Med - Pulmão 3D com Chat AR</title>
-  <meta name="description" content="AR Med - Visualização 3D e AR do pulmão com chat especializado integrado.">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>AR Med - Pulmão 3D</title>
+  <meta name="description" content="AR Med - Visualização 3D e AR do pulmão com chat especializado.">
+  <!-- Tailwind CSS via CDN -->
+  <script defer src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css">
+  <!-- Import map para resolver módulos ESM de Three.js -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://unpkg.com/three@0.156.1/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.156.1/examples/jsm/"
+        "three": "/node_modules/three/build/three.module.js"
       }
     }
   </script>
-  <style>
-    /* Estilos para AR DOM Overlay */
-    .ar-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 9999;
-    }
-    
-    .ar-chat-container {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      width: 350px;
-      max-width: calc(100vw - 40px);
-      pointer-events: auto;
-      background: rgba(15, 23, 42, 0.95);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(51, 65, 85, 0.6);
-      border-radius: 12px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
-      font-family: ui-sans-serif, system-ui, sans-serif;
-      color: white;
-    }
-    
-    .ar-chat-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
-      border-radius: 12px 12px 0 0;
-      background: rgba(30, 41, 59, 0.8);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    
-    .ar-chat-messages {
-      height: 200px;
-      overflow-y: auto;
-      padding: 12px;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(51, 65, 85, 0.8) transparent;
-    }
-    
-    .ar-chat-messages::-webkit-scrollbar {
-      width: 6px;
-    }
-    
-    .ar-chat-messages::-webkit-scrollbar-thumb {
-      background: rgba(51, 65, 85, 0.8);
-      border-radius: 3px;
-    }
-    
-    .ar-chat-input-container {
-      padding: 12px 16px;
-      border-top: 1px solid rgba(51, 65, 85, 0.5);
-      border-radius: 0 0 12px 12px;
-      background: rgba(30, 41, 59, 0.8);
-      display: flex;
-      gap: 8px;
-    }
-    
-    .ar-chat-input {
-      flex: 1;
-      background: rgba(30, 41, 59, 0.9);
-      border: 1px solid rgba(51, 65, 85, 0.8);
-      border-radius: 6px;
-      padding: 8px 12px;
-      color: white;
-      font-size: 14px;
-      outline: none;
-    }
-    
-    .ar-chat-input::placeholder {
-      color: rgba(148, 163, 184, 0.8);
-    }
-    
-    .ar-chat-input:focus {
-      border-color: rgba(5, 150, 105, 0.8);
-    }
-    
-    .ar-btn {
-      padding: 8px 12px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-      outline: none;
-    }
-    
-    .ar-btn-primary {
-      background: rgba(5, 150, 105, 0.9);
-      color: white;
-    }
-    
-    .ar-btn-primary:hover {
-      background: rgba(4, 120, 87, 0.95);
-    }
-    
-    .ar-btn-danger {
-      background: rgba(220, 38, 38, 0.9);
-      color: white;
-    }
-    
-    .ar-btn-danger:hover {
-      background: rgba(185, 28, 28, 0.95);
-    }
-    
-    .ar-btn-ghost {
-      background: transparent;
-      color: rgba(148, 163, 184, 0.8);
-      border: 1px solid transparent;
-    }
-    
-    .ar-btn-ghost:hover {
-      color: white;
-      background: rgba(51, 65, 85, 0.5);
-    }
-    
-    .ar-message {
-      margin-bottom: 8px;
-      display: flex;
-    }
-    
-    .ar-message.user {
-      justify-content: flex-end;
-    }
-    
-    .ar-message.bot {
-      justify-content: flex-start;
-    }
-    
-    .ar-message-bubble {
-      max-width: 85%;
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      line-height: 1.4;
-    }
-    
-    .ar-message.user .ar-message-bubble {
-      background: rgba(5, 150, 105, 0.8);
-      color: white;
-    }
-    
-    .ar-message.bot .ar-message-bubble {
-      background: rgba(51, 65, 85, 0.8);
-      color: white;
-    }
-    
-    .ar-controls {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      pointer-events: auto;
-    }
-    
-    .ar-status {
-      background: rgba(15, 23, 42, 0.9);
-      backdrop-filter: blur(8px);
-      padding: 8px 16px;
-      border-radius: 20px;
-      border: 1px solid rgba(51, 65, 85, 0.6);
-      font-size: 14px;
-      color: white;
-    }
-    
-    .ar-toggle-btn {
-      background: rgba(5, 150, 105, 0.9);
-      color: white;
-      border: 1px solid rgba(4, 120, 87, 0.8);
-      padding: 8px 16px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-    }
-    
-    .ar-toggle-btn:hover {
-      background: rgba(4, 120, 87, 0.95);
-    }
-    
-    .hidden {
-      display: none !important;
-    }
-    
-    /* Responsividade */
-    @media (max-width: 768px) {
-      .ar-chat-container {
-        width: calc(100vw - 40px);
-        right: 20px;
-      }
-      
-      .ar-controls {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-    }
-  </style>
 </head>
 <body class="bg-slate-900 text-slate-100 h-screen overflow-hidden">
-  <!-- DOM Overlay para AR -->
-  <div id="ar-overlay" class="ar-overlay hidden">
-    <!-- Controles AR -->
-    <div class="ar-controls">
-      <div class="ar-status">
-        <span>🔬 AR Med - Pneumologia</span>
-      </div>
-      <button id="ar-toggle-chat" class="ar-toggle-btn">💬 Chat</button>
-      <button id="ar-reset-model" class="ar-btn ar-btn-ghost" style="padding: 8px 16px; border-radius: 20px; border: 1px solid rgba(51, 65, 85, 0.6);">
-        🔄 Reset
-      </button>
-    </div>
-    
-    <!-- Container do Chat AR -->
-    <div id="ar-chat-container" class="ar-chat-container hidden">
-      <div class="ar-chat-header">
-        <div>
-          <h3 style="margin: 0; font-size: 14px; font-weight: 600;">Assistente Pulmonar</h3>
-          <p style="margin: 0; font-size: 12px; opacity: 0.8;">Especializado em pulmão</p>
-        </div>
-        <button id="ar-close-chat" class="ar-btn ar-btn-ghost" style="padding: 4px;">✕</button>
-      </div>
-      
-      <div id="ar-chat-messages" class="ar-chat-messages"></div>
-      
-      <div class="ar-chat-input-container">
-        <input id="ar-chat-input" class="ar-chat-input" type="text" placeholder="Pergunte sobre pulmão...">
-        <button id="ar-record-btn" class="ar-btn ar-btn-danger">🎤</button>
-        <button id="ar-send-btn" class="ar-btn ar-btn-primary">Enviar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Interface Desktop -->
-  <div id="desktop-app" class="flex h-screen">
+  <div id="app" class="flex h-screen">
     <!-- Área 3D -->
     <main class="relative flex-1">
       <div id="canvas-container" class="w-full h-full"></div>
 
-      <!-- Barra superior desktop -->
-      <div class="absolute top-4 left-4 right-4 flex items-center gap-2">
+      <!-- Barra superior -->
+      <div class="absolute top-4 left-4 right-4 flex items-center gap-2" id="topControls">
         <div class="px-3 py-2 rounded bg-slate-800/70 backdrop-blur border border-slate-700 text-sm">
           <span class="font-semibold">AR Med</span> · Visualização 3D/AR do pulmão
         </div>
         <div class="ml-auto flex gap-2">
-          <button id="reset-camera-btn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">
-            Resetar câmera
+          <button id="resetCameraBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Resetar câmera</button>
+          <button id="toggleAxesBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Linhas (eixos)</button>
+          <button id="mouseModeBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Modo Mouse</button>
+          <button id="toggleChatBtn" class="px-3 py-2 rounded bg-emerald-800 hover:bg-emerald-700 border border-emerald-700 text-sm hidden">💬 Chat</button>
+          <!-- O botão AR será injetado aqui -->
+          <div id="arButtonContainer"></div>
+        </div>
+      </div>
+
+      <!-- Instruções para AR -->
+      <div id="arInstructions" class="absolute bottom-4 left-4 right-4 px-4 py-3 rounded bg-slate-800/90 backdrop-blur border border-slate-700 text-sm text-center hidden">
+        <p>📱 O modelo 3D do pulmão aparecerá automaticamente à sua frente</p>
+        <p class="text-xs mt-1 text-slate-400">Use o botão "Resetar câmera" para reposicionar o modelo</p>
+      </div>
+
+      <!-- Chat AR Overlay - POSICIONADO DENTRO DO VIEWPORT AR -->
+      <div id="arChatOverlay" class="ar-chat-overlay hidden">
+        <div class="ar-chat-header">
+          <div>
+            <h3 class="ar-chat-title">Assistente Pulmonar</h3>
+            <p class="ar-chat-subtitle">Especializado em pulmão</p>
+          </div>
+          <button id="closeChatAR" class="ar-close-btn">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
           </button>
-          <button id="toggle-axes-btn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">
-            Linhas (eixos)
-          </button>
-          <div id="ar-button-container"></div>
+        </div>
+        
+        <div id="arChatMessages" class="ar-chat-messages"></div>
+        
+        <div class="ar-chat-footer">
+          <div class="ar-input-group">
+            <input id="arChatInput" type="text" placeholder="Pergunte sobre pulmão..." class="ar-chat-input" />
+            <button id="arRecordBtn" type="button" class="ar-record-btn" title="Falar">🎤</button>
+            <button id="arSendBtn" type="button" class="ar-send-btn">Enviar</button>
+          </div>
         </div>
       </div>
     </main>
 
-    <!-- Chat Desktop -->
-    <aside id="desktop-chat" class="w-[380px] max-w-[90vw] border-l border-slate-800 bg-slate-900/90 backdrop-blur p-4 flex flex-col gap-3">
+    <!-- Painel de chat desktop - Oculto em AR -->
+    <aside class="w-[380px] max-w-[90vw] border-l border-slate-800 bg-slate-900/90 backdrop-blur p-4 flex flex-col gap-3" id="desktopChat">
       <div>
         <h1 class="text-lg font-semibold">Assistente Pulmonar</h1>
         <p class="text-xs text-slate-300">Especializado em pulmão e suas patologias.</p>
       </div>
 
-      <div id="desktop-chat-messages" class="flex-1 overflow-auto space-y-3 pr-1" style="scrollbar-width: thin; scrollbar-color: #334155 #0f172a;"></div>
+      <div id="chatMessages" class="flex-1 overflow-auto space-y-3 pr-1 custom-scroll"></div>
 
-      <div class="flex gap-2">
-        <input id="desktop-chat-input" type="text" placeholder="Pergunte sobre pulmão e patologias..." 
-               class="flex-1 px-3 py-2 rounded bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-        <button id="desktop-record-btn" class="px-3 py-2 rounded bg-red-600 hover:bg-red-500 text-white">🎤</button>
-        <button id="desktop-send-btn" class="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white">Enviar</button>
-      </div>
+      <form id="chatForm" class="flex gap-2">
+        <input id="chatInput" type="text" placeholder="Pergunte sobre pulmão e patologias..." class="flex-1 px-3 py-2 rounded bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500" required />
+        
+        <button id="recordBtn" type="button" class="px-3 py-2 rounded bg-red-600 hover:bg-red-500 text-white mr-2" title="Falar">
+          🎤 Falar
+        </button>
+        <button id="sendBtn" type="submit" class="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white">Enviar</button>
+      </form>
     </aside>
   </div>
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { ARButton } from 'three/addons/webxr/ARButton.js';
+  <script type="module" src="main.js"></script>
+  <script defer src="chat.js"></script>
 
-    // Variáveis globais
-    let renderer, scene, camera, controls;
-    let lungModel = null;
-    let isARMode = false;
-    let isRecording = false;
-    let mediaRecorder = null;
-    let audioChunks = [];
+  <style>
+    /* Estilos específicos para AR Chat Overlay */
+    .ar-chat-overlay {
+      position: fixed !important;
+      top: 50% !important;
+      left: 20px !important;
+      transform: translateY(-50%) !important;
+      width: 350px !important;
+      max-width: calc(100vw - 40px) !important;
+      max-height: calc(100vh - 40px) !important;
+      z-index: 2147483647 !important; /* Máximo z-index */
+      
+      /* Fundo com alto contraste */
+      background: rgba(0, 0, 0, 0.95) !important;
+      backdrop-filter: blur(20px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+      
+      /* Bordas bem visíveis */
+      border: 2px solid rgba(16, 185, 129, 0.8) !important;
+      border-radius: 16px !important;
+      box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.8),
+        0 0 0 1px rgba(255, 255, 255, 0.1),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.1) !important;
+      
+      /* Garantir visibilidade em qualquer ambiente */
+      color: white !important;
+      font-family: ui-sans-serif, system-ui, sans-serif !important;
+      font-size: 14px !important;
+      
+      /* Remover qualquer pointer-events que possam interferir */
+      pointer-events: auto !important;
+    }
 
-    // Sistema de chat
-    class ARChatSystem {
-      constructor() {
-        this.isVisible = false;
-        this.messages = [];
-        this.setupEventListeners();
+    .ar-chat-header {
+      background: rgba(16, 185, 129, 0.15) !important;
+      backdrop-filter: blur(8px) !important;
+      border-bottom: 1px solid rgba(16, 185, 129, 0.5) !important;
+      border-radius: 14px 14px 0 0 !important;
+      padding: 16px !important;
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+    }
+
+    .ar-chat-title {
+      margin: 0 !important;
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      color: white !important;
+    }
+
+    .ar-chat-subtitle {
+      margin: 0 !important;
+      font-size: 12px !important;
+      color: rgba(255, 255, 255, 0.8) !important;
+    }
+
+    .ar-close-btn {
+      background: transparent !important;
+      border: none !important;
+      color: rgba(255, 255, 255, 0.8) !important;
+      cursor: pointer !important;
+      padding: 8px !important;
+      border-radius: 4px !important;
+      transition: all 0.2s ease !important;
+    }
+
+    .ar-close-btn:hover {
+      color: white !important;
+      background: rgba(239, 68, 68, 0.2) !important;
+    }
+
+    .ar-chat-messages {
+      height: 250px !important;
+      overflow-y: auto !important;
+      padding: 16px !important;
+      background: rgba(0, 0, 0, 0.3) !important;
+      
+      /* Scroll personalizado */
+      scrollbar-width: thin !important;
+      scrollbar-color: rgba(16, 185, 129, 0.8) transparent !important;
+    }
+
+    .ar-chat-messages::-webkit-scrollbar {
+      width: 8px !important;
+    }
+
+    .ar-chat-messages::-webkit-scrollbar-track {
+      background: transparent !important;
+    }
+
+    .ar-chat-messages::-webkit-scrollbar-thumb {
+      background: rgba(16, 185, 129, 0.8) !important;
+      border-radius: 4px !important;
+    }
+
+    .ar-chat-footer {
+      background: rgba(16, 185, 129, 0.15) !important;
+      backdrop-filter: blur(8px) !important;
+      border-top: 1px solid rgba(16, 185, 129, 0.5) !important;
+      border-radius: 0 0 14px 14px !important;
+      padding: 16px !important;
+    }
+
+    .ar-input-group {
+      display: flex !important;
+      gap: 8px !important;
+      align-items: stretch !important;
+    }
+
+    .ar-chat-input {
+      flex: 1 !important;
+      background: rgba(255, 255, 255, 0.1) !important;
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
+      border-radius: 8px !important;
+      padding: 12px !important;
+      color: white !important;
+      font-size: 14px !important;
+      outline: none !important;
+    }
+
+    .ar-chat-input::placeholder {
+      color: rgba(255, 255, 255, 0.6) !important;
+    }
+
+    .ar-chat-input:focus {
+      border-color: rgba(16, 185, 129, 0.8) !important;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+    }
+
+    .ar-record-btn {
+      background: rgba(239, 68, 68, 0.9) !important;
+      border: 1px solid rgba(220, 38, 38, 0.8) !important;
+      border-radius: 8px !important;
+      padding: 12px !important;
+      color: white !important;
+      cursor: pointer !important;
+      font-size: 12px !important;
+      transition: all 0.2s ease !important;
+      min-width: 44px !important;
+    }
+
+    .ar-record-btn:hover {
+      background: rgba(220, 38, 38, 0.95) !important;
+      transform: translateY(-1px) !important;
+    }
+
+    .ar-send-btn {
+      background: rgba(16, 185, 129, 0.9) !important;
+      border: 1px solid rgba(5, 150, 105, 0.8) !important;
+      border-radius: 8px !important;
+      padding: 12px 16px !important;
+      color: white !important;
+      cursor: pointer !important;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      transition: all 0.2s ease !important;
+    }
+
+    .ar-send-btn:hover {
+      background: rgba(5, 150, 105, 0.95) !important;
+      transform: translateY(-1px) !important;
+    }
+
+    /* Mensagens do chat AR */
+    .ar-message {
+      margin-bottom: 12px !important;
+      display: flex !important;
+    }
+
+    .ar-message.user {
+      justify-content: flex-end !important;
+    }
+
+    .ar-message.bot {
+      justify-content: flex-start !important;
+    }
+
+    .ar-message-bubble {
+      max-width: 85% !important;
+      padding: 8px 12px !important;
+      border-radius: 12px !important;
+      font-size: 14px !important;
+      line-height: 1.4 !important;
+      word-wrap: break-word !important;
+    }
+
+    .ar-message.user .ar-message-bubble {
+      background: rgba(16, 185, 129, 0.8) !important;
+      color: white !important;
+    }
+
+    .ar-message.bot .ar-message-bubble {
+      background: rgba(255, 255, 255, 0.15) !important;
+      color: white !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+
+    /* Responsividade */
+    @media (max-width: 768px) {
+      .ar-chat-overlay {
+        width: calc(100vw - 20px) !important;
+        left: 10px !important;
+        right: 10px !important;
       }
-
-      setupEventListeners() {
-        // Botões AR
-        document.getElementById('ar-toggle-chat').addEventListener('click', () => this.toggle());
-        document.getElementById('ar-close-chat').addEventListener('click', () => this.hide());
-        document.getElementById('ar-send-btn').addEventListener('click', () => this.sendMessage());
-        document.getElementById('ar-record-btn').addEventListener('click', () => this.toggleRecording());
-        document.getElementById('ar-chat-input').addEventListener('keypress', (e) => {
-          if (e.key === 'Enter') this.sendMessage();
-        });
-
-        // Botões Desktop
-        document.getElementById('desktop-send-btn').addEventListener('click', () => this.sendDesktopMessage());
-        document.getElementById('desktop-record-btn').addEventListener('click', () => this.toggleRecording());
-        document.getElementById('desktop-chat-input').addEventListener('keypress', (e) => {
-          if (e.key === 'Enter') this.sendDesktopMessage();
-        });
-      }
-
-      toggle() {
-        if (this.isVisible) {
-          this.hide();
-        } else {
-          this.show();
-        }
-      }
-
-      show() {
-        this.isVisible = true;
-        document.getElementById('ar-chat-container').classList.remove('hidden');
-        document.getElementById('ar-toggle-chat').textContent = '✕ Fechar';
-      }
-
-      hide() {
-        this.isVisible = false;
-        document.getElementById('ar-chat-container').classList.add('hidden');
-        document.getElementById('ar-toggle-chat').textContent = '💬 Chat';
-      }
-
-      addMessage(text, isUser = true, container = null) {
-        const message = { text, isUser, timestamp: new Date() };
-        this.messages.push(message);
-
-        const messageElement = document.createElement('div');
-        messageElement.className = `ar-message ${isUser ? 'user' : 'bot'}`;
-        
-        const bubble = document.createElement('div');
-        bubble.className = 'ar-message-bubble';
-        bubble.textContent = text;
-        
-        messageElement.appendChild(bubble);
-
-        // Adicionar ao container AR se estiver visível
-        if (isARMode) {
-          const arMessages = document.getElementById('ar-chat-messages');
-          arMessages.appendChild(messageElement.cloneNode(true));
-          arMessages.scrollTop = arMessages.scrollHeight;
-        }
-
-        // Adicionar ao container desktop se não estiver em AR
-        if (!isARMode || container === 'desktop') {
-          const desktopMessages = document.getElementById('desktop-chat-messages');
-          const desktopMessage = document.createElement('div');
-          desktopMessage.className = `flex ${isUser ? 'justify-end' : 'justify-start'} my-2`;
-          
-          const desktopBubble = document.createElement('div');
-          desktopBubble.className = `max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-            isUser ? 'bg-emerald-700 text-white' : 'bg-gray-100 text-gray-900'
-          }`;
-          desktopBubble.textContent = text;
-          
-          desktopMessage.appendChild(desktopBubble);
-          desktopMessages.appendChild(desktopMessage);
-          desktopMessages.scrollTop = desktopMessages.scrollHeight;
-        }
-      }
-
-      async sendMessage() {
-        const input = document.getElementById('ar-chat-input');
-        const text = input.value.trim();
-        if (!text) return;
-
-        input.value = '';
-        this.addMessage(text, true);
-
-        try {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: [{ role: 'user', content: text }] })
-          });
-
-          const data = await response.json();
-          this.addMessage(data.answer || 'Erro ao processar resposta', false);
-
-          // TTS se disponível
-          this.playTTS(data.answer);
-        } catch (error) {
-          console.error('Erro no chat:', error);
-          this.addMessage('Erro ao enviar mensagem', false);
-        }
-      }
-
-      async sendDesktopMessage() {
-        const input = document.getElementById('desktop-chat-input');
-        const text = input.value.trim();
-        if (!text) return;
-
-        input.value = '';
-        this.addMessage(text, true, 'desktop');
-
-        try {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: [{ role: 'user', content: text }] })
-          });
-
-          const data = await response.json();
-          this.addMessage(data.answer || 'Erro ao processar resposta', false, 'desktop');
-
-          // TTS se disponível
-          this.playTTS(data.answer);
-        } catch (error) {
-          console.error('Erro no chat:', error);
-          this.addMessage('Erro ao enviar mensagem', false, 'desktop');
-        }
-      }
-
-      async playTTS(text) {
-        try {
-          const response = await fetch('/api/voice/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text })
-          });
-
-          if (response.ok) {
-            const blob = await response.blob();
-            const audioUrl = URL.createObjectURL(blob);
-            const audio = new Audio(audioUrl);
-            audio.play().catch(() => console.log('TTS não disponível'));
-          }
-        } catch (error) {
-          console.log('TTS não disponível:', error);
-        }
-      }
-
-      async toggleRecording() {
-        if (isRecording) {
-          this.stopRecording();
-        } else {
-          this.startRecording();
-        }
-      }
-
-      async startRecording() {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          mediaRecorder = new MediaRecorder(stream);
-          audioChunks = [];
-          
-          mediaRecorder.ondataavailable = (event) => {
-            audioChunks.push(event.data);
-          };
-          
-          mediaRecorder.onstop = () => {
-            this.processAudio();
-          };
-          
-          mediaRecorder.start();
-          isRecording = true;
-          
-          // Atualizar UI
-          const arBtn = document.getElementById('ar-record-btn');
-          const desktopBtn = document.getElementById('desktop-record-btn');
-          arBtn.textContent = '⏹';
-          desktopBtn.textContent = '⏹ Parar';
-          
-        } catch (error) {
-          console.error('Erro ao iniciar gravação:', error);
-          alert('Erro ao acessar microfone');
-        }
-      }
-
-      stopRecording() {
-        if (mediaRecorder && isRecording) {
-          mediaRecorder.stop();
-          mediaRecorder.stream.getTracks().forEach(track => track.stop());
-          isRecording = false;
-          
-          // Atualizar UI
-          const arBtn = document.getElementById('ar-record-btn');
-          const desktopBtn = document.getElementById('desktop-record-btn');
-          arBtn.textContent = '🎤';
-          desktopBtn.textContent = '🎤';
-        }
-      }
-
-      async processAudio() {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        const formData = new FormData();
-        formData.append('file', audioBlob, 'recording.webm');
-
-        this.addMessage('🎤 Processando áudio...', true);
-
-        try {
-          const response = await fetch('/api/voice/chat', {
-            method: 'POST',
-            body: formData
-          });
-
-          const data = await response.json();
-          
-          if (data.transcript) {
-            // Substituir mensagem de processamento pela transcrição
-            const messages = isARMode ? 
-              document.getElementById('ar-chat-messages') : 
-              document.getElementById('desktop-chat-messages');
-            
-            const lastMessage = messages.lastElementChild;
-            if (lastMessage) {
-              const bubble = lastMessage.querySelector('.ar-message-bubble') || lastMessage.querySelector('div div');
-              if (bubble) bubble.textContent = data.transcript;
-            }
-          }
-
-          if (data.reply) {
-            this.addMessage(data.reply, false);
-          }
-
-          if (data.audio_base64) {
-            const audioBlob = this.base64ToBlob(data.audio_base64, 'audio/mpeg');
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audio.play().catch(() => console.log('Erro ao reproduzir áudio'));
-          }
-
-        } catch (error) {
-          console.error('Erro ao processar áudio:', error);
-          this.addMessage('Erro ao processar áudio', false);
-        }
-      }
-
-      base64ToBlob(base64, mimeType) {
-        const byteCharacters = atob(base64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        return new Blob([byteArray], { type: mimeType });
+      
+      .ar-chat-messages {
+        height: 200px !important;
       }
     }
 
-    // Inicializar cena 3D
-    function init() {
-      const container = document.getElementById('canvas-container');
+    @media (max-height: 600px) {
+      .ar-chat-overlay {
+        top: 10px !important;
+        transform: none !important;
+        height: calc(100vh - 20px) !important;
+      }
       
-      // Renderer com WebXR
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setSize(container.offsetWidth, container.offsetHeight);
-      renderer.xr.enabled = true;
-      renderer.setClearColor(0x000000, 0);
-      
-      container.appendChild(renderer.domElement);
-
-      // Cena
-      scene = new THREE.Scene();
-      
-      // Câmera
-      camera = new THREE.PerspectiveCamera(70, container.offsetWidth / container.offsetHeight, 0.01, 1000);
-      camera.position.set(0, 1.6, 3);
-
-      // Luzes
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-      scene.add(ambientLight);
-      
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(10, 10, 5);
-      scene.add(directionalLight);
-
-      // Controles
-      controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.target.set(0, 0, 0);
-
-      // Carregamento do modelo
-      const loader = new GLTFLoader();
-      
-      // Placeholder enquanto carrega
-      const geometry = new THREE.BoxGeometry(0.2, 0.3, 0.2);
-      const material = new THREE.MeshStandardMaterial({ color: 0x00ff88 });
-      const placeholder = new THREE.Mesh(geometry, material);
-      placeholder.position.set(0, 0, -1);
-      scene.add(placeholder);
-
-      // Tentar carregar modelo real
-      loader.load(
-        'models/lung.glb',
-        (gltf) => {
-          scene.remove(placeholder);
-          lungModel = gltf.scene;
-          
-          // Centralizar e escalar modelo
-          const box = new THREE.Box3().setFromObject(lungModel);
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-          
-          lungModel.position.sub(center);
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 0.5 / maxDim;
-          lungModel.scale.setScalar(scale);
-          lungModel.position.set(0, 0, -1);
-          
-          scene.add(lungModel);
-          console.log('Modelo do pulmão carregado');
-        },
-        (progress) => {
-          console.log('Carregando:', (progress.loaded / progress.total * 100) + '%');
-        },
-        (error) => {
-          console.error('Erro ao carregar modelo:', error);
-        }
-      );
-
-      // Configurar AR Button com DOM Overlay
-      const arButton = ARButton.createButton(renderer, {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay'],
-        domOverlay: { root: document.getElementById('ar-overlay') }
-      });
-      
-      document.getElementById('ar-button-container').appendChild(arButton);
-
-      // Event listeners
-      renderer.xr.addEventListener('sessionstart', onARStart);
-      renderer.xr.addEventListener('sessionend', onAREnd);
-      
-      document.getElementById('reset-camera-btn').addEventListener('click', resetCamera);
-      document.getElementById('ar-reset-model').addEventListener('click', resetModel);
-      document.getElementById('toggle-axes-btn').addEventListener('click', toggleAxes);
-
-      // Resize
-      window.addEventListener('resize', onWindowResize);
-    }
-
-    function onARStart() {
-      console.log('AR Session iniciada');
-      isARMode = true;
-      
-      // Mostrar overlay AR
-      document.getElementById('ar-overlay').classList.remove('hidden');
-      document.getElementById('desktop-app').style.display = 'none';
-      
-      // Desabilitar controles desktop
-      controls.enabled = false;
-      
-      // Posicionar modelo na frente do usuário
-      if (lungModel) {
-        lungModel.position.set(0, 0, -1);
-        lungModel.rotation.set(0, 0, 0);
+      .ar-chat-messages {
+        flex: 1 !important;
+        height: auto !important;
+        min-height: 150px !important;
       }
     }
 
-    function onAREnd() {
-      console.log('AR Session finalizada');
-      isARMode = false;
-      
-      // Ocultar overlay AR
-      document.getElementById('ar-overlay').classList.add('hidden');
-      document.getElementById('desktop-app').style.display = 'flex';
-      
-      // Reabilitar controles desktop
-      controls.enabled = true;
-      
-      // Restaurar fundo
-      scene.background = new THREE.Color(0x1e293b);
+    /* Animações */
+    .ar-chat-overlay:not(.hidden) {
+      animation: arChatSlideIn 0.3s ease-out !important;
     }
 
-    function resetCamera() {
-      if (isARMode && lungModel) {
-        lungModel.position.set(0, 0, -1);
-        lungModel.rotation.set(0, 0, 0);
+    @keyframes arChatSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-50%) translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
+      }
+    }
+
+    /* Garantir que funcione mesmo com outros estilos */
+    .ar-chat-overlay * {
+      box-sizing: border-box !important;
+    }
+  </style>
+
+  <script>
+    // Variáveis globais para controle do chat AR
+    window.arChatVisible = false;
+    
+    // Funções de chat AR
+    window.toggleARChat = function() {
+      const overlay = document.getElementById('arChatOverlay');
+      const toggleBtn = document.getElementById('toggleChatBtn');
+      
+      window.arChatVisible = !window.arChatVisible;
+      
+      if (window.arChatVisible) {
+        overlay.classList.remove('hidden');
+        toggleBtn.textContent = '✕ Fechar';
+        toggleBtn.classList.remove('bg-emerald-800', 'hover:bg-emerald-700');
+        toggleBtn.classList.add('bg-red-800', 'hover:bg-red-700');
       } else {
-        camera.position.set(0, 1.6, 3);
-        controls.target.set(0, 0, 0);
-        controls.update();
+        overlay.classList.add('hidden');
+        toggleBtn.textContent = '💬 Chat';
+        toggleBtn.classList.remove('bg-red-800', 'hover:bg-red-700');
+        toggleBtn.classList.add('bg-emerald-800', 'hover:bg-emerald-700');
       }
-    }
+    };
 
-    function resetModel() {
-      if (lungModel) {
-        lungModel.position.set(0, 0, -1);
-        lungModel.rotation.set(0, 0, 0);
-        lungModel.scale.setScalar(1);
-      }
-    }
-
-    function toggleAxes() {
-      // Implementar toggle de eixos se necessário
-    }
-
-    function onWindowResize() {
-      const container = document.getElementById('canvas-container');
-      camera.aspect = container.offsetWidth / container.offsetHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.offsetWidth, container.offsetHeight);
-    }
-
-    function animate() {
-      renderer.setAnimationLoop(render);
-    }
-
-    function render() {
-      if (controls.enabled) {
-        controls.update();
-      }
+    // Função para adicionar mensagem no chat AR
+    window.addARMessage = function(text, isUser = true) {
+      const messagesContainer = document.getElementById('arChatMessages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `ar-message ${isUser ? 'user' : 'bot'}`;
       
-      // Rotação suave do modelo quando não em AR
-      if (lungModel && !isARMode) {
-        lungModel.rotation.y += 0.005;
-      }
+      const bubble = document.createElement('div');
+      bubble.className = 'ar-message-bubble';
+      bubble.textContent = text;
       
-      renderer.render(scene, camera);
-    }
+      messageDiv.appendChild(bubble);
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      return messageDiv;
+    };
 
-    // Inicialização
+    // Controle de visibilidade baseado no modo AR
     document.addEventListener('DOMContentLoaded', () => {
-      init();
-      animate();
+      const toggleChatBtn = document.getElementById('toggleChatBtn');
+      const closeChatAR = document.getElementById('closeChatAR');
       
-      // Inicializar sistema de chat
-      window.chatSystem = new ARChatSystem();
-      
-      console.log('AR Med inicializado com chat integrado');
+      // Event listeners para botões do chat AR
+      if (toggleChatBtn) {
+        toggleChatBtn.addEventListener('click', window.toggleARChat);
+      }
+      if (closeChatAR) {
+        closeChatAR.addEventListener('click', window.toggleARChat);
+      }
+
+      // Mostrar instruções AR quando a sessão começar
+      const arInstructions = document.getElementById('arInstructions');
+      if (arInstructions) {
+        const showARInstructions = () => {
+          arInstructions.classList.remove('hidden');
+          setTimeout(() => {
+            arInstructions.classList.add('hidden');
+          }, 8000);
+        };
+
+        // Escuta o evento personalizado de início de sessão XR
+        window.addEventListener('xrsessionstart', showARInstructions);
+        
+        // Também escuta mudanças no renderer (fallback)
+        const checkARSession = setInterval(() => {
+          const canvas = document.querySelector('#canvas-container canvas');
+          if (canvas && canvas.classList.contains('xr-presenting')) {
+            showARInstructions();
+            clearInterval(checkARSession);
+          }
+        }, 500);
+        
+        setTimeout(() => clearInterval(checkARSession), 10000);
+      }
+
+      console.log('AR Chat System carregado');
     });
   </script>
 </body>
