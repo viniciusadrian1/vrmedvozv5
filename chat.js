@@ -1,12 +1,9 @@
-// chat.js - integração com modo AR e desktop
+// chat.js - integração compatível com Chat 3D em AR e modo desktop
 document.addEventListener('DOMContentLoaded', () => {
   const chatMessagesEl = document.getElementById('chatMessages');
-  const arChatMessagesEl = document.getElementById('arChatMessages');
   const chatFormEl = document.getElementById('chatForm');
   const chatInputEl = document.getElementById('chatInput');
-  const arChatInputEl = document.getElementById('arChatInput');
   const sendBtnEl = document.getElementById('sendBtn');
-  const arSendBtnEl = document.getElementById('arSendBtn');
 
   // Variáveis para controle de estado
   let isARMode = false;
@@ -16,61 +13,37 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateChatMode(arMode) {
     isARMode = arMode;
     const desktopChat = document.getElementById('desktopChat');
-    const toggleChatBtn = document.getElementById('toggleChatBtn');
-    const arChatOverlay = document.getElementById('arChatOverlay');
     
     if (arMode) {
-      // Modo AR ativo
-      desktopChat.classList.add('hidden');
-      toggleChatBtn.classList.remove('hidden');
-      currentMessagesContainer = arChatMessagesEl;
-      
-      // Sincronizar mensagens do desktop para AR
-      syncMessagesToAR();
+      // Modo AR ativo - chat 3D gerencia as mensagens
+      console.log('Chat mode: AR 3D - Desktop chat hidden');
+      if (desktopChat) {
+        desktopChat.classList.add('hidden');
+      }
     } else {
-      // Modo Desktop
-      desktopChat.classList.remove('hidden');
-      toggleChatBtn.classList.add('hidden');
-      arChatOverlay.classList.add('hidden');
-      window.arChatVisible = false;
-      currentMessagesContainer = chatMessagesEl;
-      
-      // Sincronizar mensagens do AR para desktop
-      syncMessagesToDesktop();
-    }
-  }
-
-  // Função para sincronizar mensagens entre containers
-  function syncMessagesToAR() {
-    if (arChatMessagesEl && chatMessagesEl) {
-      arChatMessagesEl.innerHTML = chatMessagesEl.innerHTML;
-      scrollToBottom(arChatMessagesEl);
-    }
-  }
-
-  function syncMessagesToDesktop() {
-    if (chatMessagesEl && arChatMessagesEl) {
-      chatMessagesEl.innerHTML = arChatMessagesEl.innerHTML;
-      scrollToBottom(chatMessagesEl);
+      // Modo Desktop - usar chat tradicional
+      console.log('Chat mode: Desktop - Traditional chat visible');
+      if (desktopChat) {
+        desktopChat.classList.remove('hidden');
+      }
     }
   }
 
   // Detectar mudanças no modo XR
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('xrsessionstart', () => {
-      console.log('Modo AR ativado - ajustando interface do chat');
+      console.log('XR Session started - Chat mode: 3D AR');
       setTimeout(() => updateChatMode(true), 500);
     });
     
     window.addEventListener('xrsessionend', () => {
-      console.log('Modo AR desativado - voltando ao chat desktop');
+      console.log('XR Session ended - Chat mode: Desktop');
       setTimeout(() => updateChatMode(false), 500);
     });
   }
 
-  // Configurar botão de gravação (existente ou criar)
+  // Configurar botão de gravação (apenas para desktop)
   let recordBtn = document.getElementById('recordBtn');
-  let arRecordBtn = document.getElementById('arRecordBtn');
   
   if (!recordBtn && sendBtnEl && sendBtnEl.parentNode) {
     recordBtn = document.createElement('button');
@@ -97,6 +70,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function addMsg(text, user = true, container = null) {
+    // Se estivermos em AR, pular o chat desktop
+    if (isARMode) {
+      console.log(`AR Mode: Message "${text}" handled by 3D chat system`);
+      return null;
+    }
+
     const targetContainer = container || currentMessagesContainer;
     if (!targetContainer) {
       console.warn('Container de mensagens não encontrado');
@@ -114,15 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     targetContainer.appendChild(wrapper);
     scrollToBottom(targetContainer);
-    
-    // Sincronizar entre containers se necessário
-    if (isARMode && targetContainer === arChatMessagesEl && chatMessagesEl) {
-      const syncWrapper = wrapper.cloneNode(true);
-      chatMessagesEl.appendChild(syncWrapper);
-    } else if (!isARMode && targetContainer === chatMessagesEl && arChatMessagesEl) {
-      const syncWrapper = wrapper.cloneNode(true);
-      arChatMessagesEl.appendChild(syncWrapper);
-    }
     
     return wrapper;
   }
@@ -144,6 +114,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function handleSendMessage(inputEl, sendBtn) {
+    // Em modo AR, não processar mensagens do desktop
+    if (isARMode) {
+      console.log('AR Mode active: Desktop chat disabled');
+      return;
+    }
+
     const text = inputEl.value.trim();
     if (!text) return;
     
@@ -158,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (thinkingEl) thinkingEl.remove();
       addMsg(answer, false);
       
-      // Reproduzir TTS se disponível
+      // Reproduzir TTS se disponível (apenas em desktop)
       try {
         const ttsResp = await fetch('/api/voice/tts', { 
           method: 'POST', 
@@ -184,38 +160,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Event listeners para chat desktop
+  // Event listeners para chat desktop (apenas quando não em AR)
   if (chatFormEl) {
     chatFormEl.addEventListener('submit', async (e) => {
       e.preventDefault();
-      await handleSendMessage(chatInputEl, sendBtnEl);
-    });
-  }
-
-  // Event listeners para chat AR
-  if (arSendBtnEl) {
-    arSendBtnEl.addEventListener('click', async (e) => {
-      e.preventDefault();
-      await handleSendMessage(arChatInputEl, arSendBtnEl);
-    });
-  }
-
-  if (arChatInputEl) {
-    arChatInputEl.addEventListener('keypress', async (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        await handleSendMessage(arChatInputEl, arSendBtnEl);
+      if (!isARMode) {
+        await handleSendMessage(chatInputEl, sendBtnEl);
       }
     });
   }
 
-  // Sistema de gravação de voz - Variáveis compartilhadas
+  // Sistema de gravação de voz - apenas para desktop
   let mediaRecorder = null;
   let chunks = [];
   let isRecording = false;
   let currentStream = null;
 
   async function startRecording(recordButton) {
+    // Não permitir gravação em AR (será feita pelo sistema 3D)
+    if (isARMode) {
+      console.log('AR Mode: Voice recording handled by 3D system');
+      return;
+    }
+
     if (isRecording) return;
     
     try {
@@ -243,7 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
     mediaRecorder.start();
     isRecording = true;
     
-    // Atualizar todos os botões de gravação
     updateRecordingButtons(true);
   }
 
@@ -261,25 +227,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateRecordingButtons(recording) {
-    const buttons = [recordBtn, arRecordBtn].filter(btn => btn);
-    
-    buttons.forEach(btn => {
+    // Apenas atualizar em modo desktop
+    if (isARMode) return;
+
+    if (recordBtn) {
       if (recording) {
-        btn.textContent = '⏹️ Parar';
-        btn.classList.remove('bg-red-600', 'hover:bg-red-500');
-        btn.classList.add('bg-gray-600', 'hover:bg-gray-500');
+        recordBtn.textContent = '⏹️ Parar';
+        recordBtn.classList.remove('bg-red-600', 'hover:bg-red-500');
+        recordBtn.classList.add('bg-gray-600', 'hover:bg-gray-500');
       } else {
-        btn.textContent = btn.id === 'arRecordBtn' ? '🎤' : '🎤 Falar';
-        btn.classList.remove('bg-gray-600', 'hover:bg-gray-500');
-        btn.classList.add('bg-red-600', 'hover:bg-red-500');
+        recordBtn.textContent = '🎤 Falar';
+        recordBtn.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+        recordBtn.classList.add('bg-red-600', 'hover:bg-red-500');
       }
-    });
+    }
   }
 
-  // Event listeners para gravação
+  // Event listener para gravação desktop
   if (recordBtn) {
     recordBtn.addEventListener('click', async (e) => {
       e.preventDefault();
+      if (isARMode) return; // Ignorar em AR
+      
       if (!isRecording) {
         await startRecording(recordBtn);
       } else {
@@ -288,18 +257,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (arRecordBtn) {
-    arRecordBtn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (!isRecording) {
-        await startRecording(arRecordBtn);
-      } else {
-        await stopRecording();
-      }
-    });
-  }
-
   async function handleVoiceBlob(blob) {
+    // Apenas processar em desktop
+    if (isARMode) {
+      console.log('AR Mode: Voice processing handled by 3D system');
+      return;
+    }
+
     const tempEl = addMsg('⏳ Transcrevendo áudio...', true);
     const fd = new FormData();
     fd.append('file', blob, 'recording.webm');
@@ -359,13 +323,33 @@ document.addEventListener('DOMContentLoaded', () => {
     return new Blob([out], { type: mime });
   }
 
+  // Funções globais para compatibilidade
+  window.addDesktopMessage = function(text, isUser = false) {
+    if (!isARMode) {
+      return addMsg(text, isUser);
+    }
+    return null;
+  };
+
+  window.isDesktopChatActive = function() {
+    return !isARMode;
+  };
+
   // Inicialização
-  console.log('Chat system initialized for AR/Desktop modes');
+  console.log('Chat system initialized - Compatible with AR 3D and Desktop modes');
   
   // Verificar se já está em modo XR no carregamento
   setTimeout(() => {
-    if (document.querySelector('#canvas-container canvas')?.classList.contains('xr-presenting')) {
+    const canvas = document.querySelector('#canvas-container canvas');
+    if (canvas && canvas.classList && canvas.classList.contains('xr-presenting')) {
       updateChatMode(true);
     }
   }, 1000);
+
+  // Mensagem de boas-vindas apenas em desktop
+  setTimeout(() => {
+    if (!isARMode && chatMessagesEl) {
+      addMsg('Olá! Sou seu assistente especializado em pneumologia. Como posso ajudá-lo hoje?', false);
+    }
+  }, 1500);
 });

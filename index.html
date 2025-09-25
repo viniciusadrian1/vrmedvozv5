@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AR Med - Pulmão 3D</title>
-  <meta name="description" content="AR Med - Visualização 3D e AR do pulmão com chat especializado.">
+  <title>AR Med - Pulmão 3D com Chat Integrado</title>
+  <meta name="description" content="AR Med - Visualização 3D e AR do pulmão com chat especializado integrado ao ambiente 3D.">
   <!-- Tailwind CSS via CDN -->
   <script defer src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css">
@@ -26,13 +26,12 @@
       <!-- Barra superior -->
       <div class="absolute top-4 left-4 right-4 flex items-center gap-2" id="topControls">
         <div class="px-3 py-2 rounded bg-slate-800/70 backdrop-blur border border-slate-700 text-sm">
-          <span class="font-semibold">AR Med</span> · Visualização 3D/AR do pulmão
+          <span class="font-semibold">AR Med</span> • Visualização 3D/AR do pulmão com Chat Integrado
         </div>
         <div class="ml-auto flex gap-2">
           <button id="resetCameraBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Resetar câmera</button>
           <button id="toggleAxesBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Linhas (eixos)</button>
           <button id="mouseModeBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Modo Mouse</button>
-          <button id="toggleChatBtn" class="px-3 py-2 rounded bg-emerald-800 hover:bg-emerald-700 border border-emerald-700 text-sm hidden">💬 Chat</button>
           <!-- O botão AR será injetado aqui -->
           <div id="arButtonContainer"></div>
         </div>
@@ -40,41 +39,23 @@
 
       <!-- Instruções para AR -->
       <div id="arInstructions" class="absolute bottom-4 left-4 right-4 px-4 py-3 rounded bg-slate-800/90 backdrop-blur border border-slate-700 text-sm text-center hidden">
-        <p>📱 O modelo 3D do pulmão aparecerá automaticamente à sua frente</p>
-        <p class="text-xs mt-1 text-slate-400">Use o botão "Resetar câmera" para reposicionar o modelo</p>
+        <p>📱 O modelo 3D do pulmão e chat integrado aparecerão automaticamente à sua frente</p>
+        <p class="text-xs mt-1 text-slate-400">Use os controles VR para interagir com o modelo e o chat 3D</p>
       </div>
 
-      <!-- Chat AR Overlay - POSICIONADO DENTRO DO VIEWPORT AR -->
-      <div id="arChatOverlay" class="ar-chat-overlay hidden">
-        <div class="ar-chat-header">
-          <div>
-            <h3 class="ar-chat-title">Assistente Pulmonar</h3>
-            <p class="ar-chat-subtitle">Especializado em pulmão</p>
-          </div>
-          <button id="closeChatAR" class="ar-close-btn">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-          </button>
-        </div>
-        
-        <div id="arChatMessages" class="ar-chat-messages"></div>
-        
-        <div class="ar-chat-footer">
-          <div class="ar-input-group">
-            <input id="arChatInput" type="text" placeholder="Pergunte sobre pulmão..." class="ar-chat-input" />
-            <button id="arRecordBtn" type="button" class="ar-record-btn" title="Falar">🎤</button>
-            <button id="arSendBtn" type="button" class="ar-send-btn">Enviar</button>
-          </div>
-        </div>
+      <!-- Status do Chat 3D (visível apenas em AR) -->
+      <div id="arChatStatus" class="absolute top-20 right-4 px-3 py-2 rounded bg-emerald-800/90 backdrop-blur border border-emerald-700 text-sm hidden">
+        <p class="text-emerald-100">💬 Chat 3D Ativo</p>
+        <p class="text-xs text-emerald-200">Use controles VR para interagir</p>
       </div>
     </main>
 
-    <!-- Painel de chat desktop - Oculto em AR -->
+    <!-- Painel de chat desktop - Visível apenas em modo desktop -->
     <aside class="w-[380px] max-w-[90vw] border-l border-slate-800 bg-slate-900/90 backdrop-blur p-4 flex flex-col gap-3" id="desktopChat">
       <div>
         <h1 class="text-lg font-semibold">Assistente Pulmonar</h1>
         <p class="text-xs text-slate-300">Especializado em pulmão e suas patologias.</p>
+        <p class="text-xs text-slate-400 mt-1">Em AR: Chat integrado ao ambiente 3D</p>
       </div>
 
       <div id="chatMessages" class="flex-1 overflow-auto space-y-3 pr-1 custom-scroll"></div>
@@ -87,6 +68,14 @@
         </button>
         <button id="sendBtn" type="submit" class="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white">Enviar</button>
       </form>
+
+      <!-- Informações sobre o chat 3D -->
+      <div class="mt-2 p-2 rounded bg-slate-800/50 border border-slate-700">
+        <p class="text-xs text-slate-400 mb-1">💡 Modo AR:</p>
+        <p class="text-xs text-slate-300">• Chat aparece como painel 3D no ambiente</p>
+        <p class="text-xs text-slate-300">• Use controles VR para interagir</p>
+        <p class="text-xs text-slate-300">• Botão de microfone integrado</p>
+      </div>
     </aside>
   </div>
 
@@ -94,334 +83,201 @@
   <script defer src="chat.js"></script>
 
   <style>
-    /* Estilos específicos para AR Chat Overlay */
-    .ar-chat-overlay {
-      position: fixed !important;
-      top: 50% !important;
-      left: 20px !important;
-      transform: translateY(-50%) !important;
-      width: 350px !important;
-      max-width: calc(100vw - 40px) !important;
-      max-height: calc(100vh - 40px) !important;
-      z-index: 2147483647 !important; /* Máximo z-index */
-      
-      /* Fundo com alto contraste */
-      background: rgba(0, 0, 0, 0.95) !important;
-      backdrop-filter: blur(20px) saturate(180%) !important;
-      -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-      
-      /* Bordas bem visíveis */
-      border: 2px solid rgba(16, 185, 129, 0.8) !important;
-      border-radius: 16px !important;
-      box-shadow: 
-        0 25px 50px -12px rgba(0, 0, 0, 0.8),
-        0 0 0 1px rgba(255, 255, 255, 0.1),
-        inset 0 1px 0 0 rgba(255, 255, 255, 0.1) !important;
-      
-      /* Garantir visibilidade em qualquer ambiente */
-      color: white !important;
-      font-family: ui-sans-serif, system-ui, sans-serif !important;
-      font-size: 14px !important;
-      
-      /* Remover qualquer pointer-events que possam interferir */
-      pointer-events: auto !important;
+    /* Melhorar contraste dos controles sobre o fundo da câmera */
+    .absolute.top-4 > div {
+      backdrop-filter: blur(12px) saturate(150%) !important;
+      background: rgba(30, 41, 59, 0.9) !important;
+      border: 1px solid rgba(51, 65, 85, 0.7) !important;
     }
 
-    .ar-chat-header {
-      background: rgba(16, 185, 129, 0.15) !important;
+    .absolute.top-4 button {
       backdrop-filter: blur(8px) !important;
-      border-bottom: 1px solid rgba(16, 185, 129, 0.5) !important;
-      border-radius: 14px 14px 0 0 !important;
-      padding: 16px !important;
-      display: flex !important;
-      justify-content: space-between !important;
-      align-items: center !important;
-    }
-
-    .ar-chat-title {
-      margin: 0 !important;
-      font-size: 16px !important;
-      font-weight: 600 !important;
-      color: white !important;
-    }
-
-    .ar-chat-subtitle {
-      margin: 0 !important;
-      font-size: 12px !important;
-      color: rgba(255, 255, 255, 0.8) !important;
-    }
-
-    .ar-close-btn {
-      background: transparent !important;
-      border: none !important;
-      color: rgba(255, 255, 255, 0.8) !important;
-      cursor: pointer !important;
-      padding: 8px !important;
-      border-radius: 4px !important;
+      background: rgba(30, 41, 59, 0.95) !important;
+      border: 1px solid rgba(51, 65, 85, 0.8) !important;
       transition: all 0.2s ease !important;
     }
 
-    .ar-close-btn:hover {
-      color: white !important;
-      background: rgba(239, 68, 68, 0.2) !important;
-    }
-
-    .ar-chat-messages {
-      height: 250px !important;
-      overflow-y: auto !important;
-      padding: 16px !important;
-      background: rgba(0, 0, 0, 0.3) !important;
-      
-      /* Scroll personalizado */
-      scrollbar-width: thin !important;
-      scrollbar-color: rgba(16, 185, 129, 0.8) transparent !important;
-    }
-
-    .ar-chat-messages::-webkit-scrollbar {
-      width: 8px !important;
-    }
-
-    .ar-chat-messages::-webkit-scrollbar-track {
-      background: transparent !important;
-    }
-
-    .ar-chat-messages::-webkit-scrollbar-thumb {
-      background: rgba(16, 185, 129, 0.8) !important;
-      border-radius: 4px !important;
-    }
-
-    .ar-chat-footer {
-      background: rgba(16, 185, 129, 0.15) !important;
-      backdrop-filter: blur(8px) !important;
-      border-top: 1px solid rgba(16, 185, 129, 0.5) !important;
-      border-radius: 0 0 14px 14px !important;
-      padding: 16px !important;
-    }
-
-    .ar-input-group {
-      display: flex !important;
-      gap: 8px !important;
-      align-items: stretch !important;
-    }
-
-    .ar-chat-input {
-      flex: 1 !important;
-      background: rgba(255, 255, 255, 0.1) !important;
-      border: 1px solid rgba(255, 255, 255, 0.3) !important;
-      border-radius: 8px !important;
-      padding: 12px !important;
-      color: white !important;
-      font-size: 14px !important;
-      outline: none !important;
-    }
-
-    .ar-chat-input::placeholder {
-      color: rgba(255, 255, 255, 0.6) !important;
-    }
-
-    .ar-chat-input:focus {
-      border-color: rgba(16, 185, 129, 0.8) !important;
-      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
-    }
-
-    .ar-record-btn {
-      background: rgba(239, 68, 68, 0.9) !important;
-      border: 1px solid rgba(220, 38, 38, 0.8) !important;
-      border-radius: 8px !important;
-      padding: 12px !important;
-      color: white !important;
-      cursor: pointer !important;
-      font-size: 12px !important;
-      transition: all 0.2s ease !important;
-      min-width: 44px !important;
-    }
-
-    .ar-record-btn:hover {
-      background: rgba(220, 38, 38, 0.95) !important;
+    .absolute.top-4 button:hover {
+      background: rgba(51, 65, 85, 0.95) !important;
       transform: translateY(-1px) !important;
     }
 
-    .ar-send-btn {
-      background: rgba(16, 185, 129, 0.9) !important;
-      border: 1px solid rgba(5, 150, 105, 0.8) !important;
-      border-radius: 8px !important;
-      padding: 12px 16px !important;
-      color: white !important;
-      cursor: pointer !important;
-      font-size: 12px !important;
-      font-weight: 500 !important;
-      transition: all 0.2s ease !important;
+    /* Status do chat 3D */
+    #arChatStatus {
+      animation: pulse 2s infinite;
     }
 
-    .ar-send-btn:hover {
-      background: rgba(5, 150, 105, 0.95) !important;
-      transform: translateY(-1px) !important;
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.7; }
     }
 
-    /* Mensagens do chat AR */
-    .ar-message {
-      margin-bottom: 12px !important;
-      display: flex !important;
+    /* Melhorar visibilidade das instruções AR */
+    #arInstructions {
+      backdrop-filter: blur(12px) saturate(150%) !important;
+      background: rgba(30, 41, 59, 0.95) !important;
+      border: 1px solid rgba(51, 65, 85, 0.7) !important;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4) !important;
     }
 
-    .ar-message.user {
-      justify-content: flex-end !important;
-    }
-
-    .ar-message.bot {
-      justify-content: flex-start !important;
-    }
-
-    .ar-message-bubble {
-      max-width: 85% !important;
-      padding: 8px 12px !important;
-      border-radius: 12px !important;
-      font-size: 14px !important;
-      line-height: 1.4 !important;
-      word-wrap: break-word !important;
-    }
-
-    .ar-message.user .ar-message-bubble {
-      background: rgba(16, 185, 129, 0.8) !important;
-      color: white !important;
-    }
-
-    .ar-message.bot .ar-message-bubble {
-      background: rgba(255, 255, 255, 0.15) !important;
-      color: white !important;
-      border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    }
-
-    /* Responsividade */
+    /* Responsividade para dispositivos móveis */
     @media (max-width: 768px) {
-      .ar-chat-overlay {
-        width: calc(100vw - 20px) !important;
-        left: 10px !important;
-        right: 10px !important;
+      .absolute.top-4 {
+        top: 0.5rem !important;
+        left: 0.25rem !important;
+        right: 0.25rem !important;
       }
       
-      .ar-chat-messages {
-        height: 200px !important;
+      .absolute.top-4 > div,
+      .absolute.top-4 button {
+        font-size: 0.75rem !important;
+        padding: 0.25rem 0.5rem !important;
+      }
+      
+      #arChatStatus {
+        top: 4rem !important;
+        right: 0.25rem !important;
+      }
+      
+      aside#desktopChat {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        top: auto !important;
+        height: 50vh !important;
+        border-left: none !important;
+        border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
+        border-radius: 16px 16px 0 0 !important;
       }
     }
 
-    @media (max-height: 600px) {
-      .ar-chat-overlay {
-        top: 10px !important;
+    /* Animações suaves */
+    #arChatStatus {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    #arChatStatus.hidden {
+      opacity: 0 !important;
+      transform: translateX(100%) !important;
+      pointer-events: none !important;
+    }
+
+    /* Garantir que funcione em modo alto contraste */
+    @media (prefers-contrast: high) {
+      #arChatStatus {
+        background: rgba(0, 100, 0, 0.95) !important;
+        border: 2px solid rgba(255, 255, 255, 0.8) !important;
+        color: white !important;
+      }
+    }
+
+    /* Reduzir animações para usuários que preferem menos movimento */
+    @media (prefers-reduced-motion: reduce) {
+      #arChatStatus {
+        animation: none !important;
+        transition: opacity 0.1s ease !important;
+      }
+      
+      .absolute.top-4 button:hover {
         transform: none !important;
-        height: calc(100vh - 20px) !important;
       }
-      
-      .ar-chat-messages {
-        flex: 1 !important;
-        height: auto !important;
-        min-height: 150px !important;
-      }
-    }
-
-    /* Animações */
-    .ar-chat-overlay:not(.hidden) {
-      animation: arChatSlideIn 0.3s ease-out !important;
-    }
-
-    @keyframes arChatSlideIn {
-      from {
-        opacity: 0;
-        transform: translateY(-50%) translateX(-20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(-50%) translateX(0);
-      }
-    }
-
-    /* Garantir que funcione mesmo com outros estilos */
-    .ar-chat-overlay * {
-      box-sizing: border-box !important;
     }
   </style>
 
   <script>
-    // Variáveis globais para controle do chat AR
-    window.arChatVisible = false;
+    // Sistema de controle do chat desktop vs AR
+    let isInARMode = false;
     
-    // Funções de chat AR
-    window.toggleARChat = function() {
-      const overlay = document.getElementById('arChatOverlay');
-      const toggleBtn = document.getElementById('toggleChatBtn');
+    // Funções para gerenciar a interface
+    function updateInterfaceForAR(arActive) {
+      isInARMode = arActive;
+      const desktopChat = document.getElementById('desktopChat');
+      const arChatStatus = document.getElementById('arChatStatus');
       
-      window.arChatVisible = !window.arChatVisible;
-      
-      if (window.arChatVisible) {
-        overlay.classList.remove('hidden');
-        toggleBtn.textContent = '✕ Fechar';
-        toggleBtn.classList.remove('bg-emerald-800', 'hover:bg-emerald-700');
-        toggleBtn.classList.add('bg-red-800', 'hover:bg-red-700');
+      if (arActive) {
+        // Modo AR ativo - ocultar chat desktop, mostrar status
+        desktopChat.classList.add('hidden');
+        arChatStatus.classList.remove('hidden');
+        console.log('Interface atualizada para modo AR - Chat 3D ativo');
       } else {
-        overlay.classList.add('hidden');
-        toggleBtn.textContent = '💬 Chat';
-        toggleBtn.classList.remove('bg-red-800', 'hover:bg-red-700');
-        toggleBtn.classList.add('bg-emerald-800', 'hover:bg-emerald-700');
+        // Modo Desktop - mostrar chat desktop, ocultar status AR
+        desktopChat.classList.remove('hidden');
+        arChatStatus.classList.add('hidden');
+        console.log('Interface atualizada para modo Desktop');
       }
-    };
+    }
 
-    // Função para adicionar mensagem no chat AR
-    window.addARMessage = function(text, isUser = true) {
-      const messagesContainer = document.getElementById('arChatMessages');
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `ar-message ${isUser ? 'user' : 'bot'}`;
-      
-      const bubble = document.createElement('div');
-      bubble.className = 'ar-message-bubble';
-      bubble.textContent = text;
-      
-      messageDiv.appendChild(bubble);
-      messagesContainer.appendChild(messageDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      
-      return messageDiv;
-    };
-
-    // Controle de visibilidade baseado no modo AR
+    // Escutar eventos de sessão XR
     document.addEventListener('DOMContentLoaded', () => {
-      const toggleChatBtn = document.getElementById('toggleChatBtn');
-      const closeChatAR = document.getElementById('closeChatAR');
+      // Detectar início de sessão AR
+      window.addEventListener('xrsessionstart', () => {
+        console.log('Sessão AR iniciada - Ativando interface AR');
+        setTimeout(() => updateInterfaceForAR(true), 500);
+      });
       
-      // Event listeners para botões do chat AR
-      if (toggleChatBtn) {
-        toggleChatBtn.addEventListener('click', window.toggleARChat);
-      }
-      if (closeChatAR) {
-        closeChatAR.addEventListener('click', window.toggleARChat);
-      }
+      // Detectar fim de sessão AR
+      window.addEventListener('xrsessionend', () => {
+        console.log('Sessão AR finalizada - Voltando à interface desktop');
+        setTimeout(() => updateInterfaceForAR(false), 500);
+      });
 
-      // Mostrar instruções AR quando a sessão começar
-      const arInstructions = document.getElementById('arInstructions');
-      if (arInstructions) {
-        const showARInstructions = () => {
+      // Mostrar instruções específicas para chat 3D quando AR iniciar
+      window.addEventListener('xrsessionstart', () => {
+        const arInstructions = document.getElementById('arInstructions');
+        if (arInstructions) {
+          arInstructions.innerHTML = `
+            <div style="background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; color: white;">
+              <p>🎮 <strong>Chat 3D Integrado ao Ambiente AR:</strong></p>
+              <p>• Procure pelo painel de chat 3D à sua esquerda</p>
+              <p>• Botão 💬 para mostrar/ocultar o chat</p>
+              <p>• Botão 🎤 para gravar mensagens de voz</p>
+              <p>• Use os controles VR para interagir</p>
+              <br>
+              <p style="color: #10b981;">✨ Chat totalmente integrado ao ambiente 3D!</p>
+            </div>
+          `;
           arInstructions.classList.remove('hidden');
+          
           setTimeout(() => {
             arInstructions.classList.add('hidden');
-          }, 8000);
-        };
+          }, 12000);
+        }
+      });
 
-        // Escuta o evento personalizado de início de sessão XR
-        window.addEventListener('xrsessionstart', showARInstructions);
-        
-        // Também escuta mudanças no renderer (fallback)
-        const checkARSession = setInterval(() => {
-          const canvas = document.querySelector('#canvas-container canvas');
-          if (canvas && canvas.classList.contains('xr-presenting')) {
-            showARInstructions();
-            clearInterval(checkARSession);
-          }
-        }, 500);
-        
-        setTimeout(() => clearInterval(checkARSession), 10000);
-      }
-
-      console.log('AR Chat System carregado');
+      console.log('Sistema de interface AR/Desktop carregado');
     });
+
+    // Função global para adicionar mensagem (compatibilidade com chat.js)
+    window.addARMessage = function(text, isUser = false) {
+      // Em AR, as mensagens são gerenciadas pelo sistema 3D
+      // Em desktop, usar o sistema tradicional
+      if (!isInARMode) {
+        const messagesContainer = document.getElementById('chatMessages');
+        if (messagesContainer) {
+          const messageDiv = document.createElement('div');
+          messageDiv.className = isUser ? 'flex justify-end my-2' : 'flex justify-start my-2';
+          
+          const bubble = document.createElement('div');
+          bubble.className = isUser 
+            ? 'max-w-[85%] rounded-lg bg-emerald-700 text-white px-3 py-2 text-sm'
+            : 'max-w-[85%] rounded-lg bg-gray-100 text-gray-900 px-3 py-2 text-sm';
+          bubble.textContent = text;
+          
+          messageDiv.appendChild(bubble);
+          messagesContainer.appendChild(messageDiv);
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          
+          return messageDiv;
+        }
+      }
+      return null;
+    };
+
+    // Função para verificar se está em modo AR
+    window.isARMode = function() {
+      return isInARMode;
+    };
   </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// Cena 3D: Three.js + WebXR AR + GLTF do pulmão (ES Modules)
+// Cena 3D: Three.js + WebXR AR + GLTF do pulmão + Chat 3D Integrado
 import * as THREE from 'three';
 import { OrbitControls } from '/node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from '/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
@@ -9,7 +9,6 @@ let renderer, scene, camera, controls;
 let lungRoot = null, placeholderMesh = null, axesHelper = null;
 let raycaster, tempMatrix = new THREE.Matrix4();
 let group; // Grupo para manipulação em AR
-let selectedObject = null;
 
 // Variáveis para movimento/posicionamento em AR
 let hitTestSource = null;
@@ -20,7 +19,6 @@ let isModelPlaced = false;
 // Variáveis para interação com controles VR
 let controller1, controller2;
 let controllerGrip1, controllerGrip2;
-let hand1, hand2;
 let controllerModelFactory;
 
 // Variáveis para movimento e manipulação
@@ -34,11 +32,11 @@ let isGrabbingWithBothControllers = false;
 let initialControllersDistance = 0;
 let initialModelScale = new THREE.Vector3();
 let controller1InitialPos = new THREE.Vector3();
-let controller2InitialPos = new THREE.Vector3();
+let controller2InitialPos = new THREE.Vector2();
 
-// Área de movimento VR (boundary circle) - AUMENTADO SIGNIFICATIVAMENTE
+// Área de movimento VR (boundary circle)
 let playArea;
-const PLAY_AREA_RADIUS = 25.0; // Ajustado para 25 metros (unidades AR = metros)
+const PLAY_AREA_RADIUS = 25.0;
 
 // Teleport
 let teleportMarker;
@@ -53,8 +51,518 @@ let touches = [];
 // Variáveis para controle da interface AR
 let isInARMode = false;
 
+// === SISTEMA DE CHAT 3D INTEGRADO ===
+let chatPanel = null;
+let chatMessages = [];
+let chatInputField = null;
+let chatSendButton = null;
+let chatRecordButton = null;
+let chatIsVisible = false;
+let chatToggleButton = null;
+
+// Canvas para renderizar texto
+let chatCanvas = null;
+let chatContext = null;
+
+// Configurações do chat 3D
+const CHAT_CONFIG = {
+  panel: {
+    width: 1.2,
+    height: 1.6,
+    depth: 0.05,
+    position: { x: -1.5, y: 0.8, z: 0 }
+  },
+  text: {
+    fontSize: 24,
+    lineHeight: 30,
+    padding: 20,
+    maxLines: 20,
+    maxChars: 100
+  },
+  colors: {
+    panel: 0x1e293b,
+    border: 0x334155,
+    text: 0xf1f5f9,
+    userText: 0x10b981,
+    botText: 0x64748b,
+    button: 0x059669,
+    buttonHover: 0x047857
+  }
+};
+
+function create3DChatSystem() {
+  if (chatPanel) return; // Já criado
+
+  // Criar grupo para o chat
+  const chatGroup = new THREE.Group();
+  chatGroup.name = 'ChatSystem';
+  
+  // Panel principal
+  const panelGeometry = new THREE.BoxGeometry(
+    CHAT_CONFIG.panel.width,
+    CHAT_CONFIG.panel.height,
+    CHAT_CONFIG.panel.depth
+  );
+  
+  const panelMaterial = new THREE.MeshLambertMaterial({ 
+    color: CHAT_CONFIG.colors.panel,
+    transparent: true,
+    opacity: 0.95
+  });
+  
+  chatPanel = new THREE.Mesh(panelGeometry, panelMaterial);
+  chatPanel.position.set(
+    CHAT_CONFIG.panel.position.x,
+    CHAT_CONFIG.panel.position.y,
+    CHAT_CONFIG.panel.position.z
+  );
+  
+  // Adicionar borda
+  const borderGeometry = new THREE.EdgesGeometry(panelGeometry);
+  const borderMaterial = new THREE.LineBasicMaterial({ 
+    color: CHAT_CONFIG.colors.border,
+    linewidth: 2
+  });
+  const border = new THREE.LineSegments(borderGeometry, borderMaterial);
+  chatPanel.add(border);
+  
+  // Canvas para texto das mensagens
+  createChatCanvas();
+  
+  // Texture do canvas no painel
+  const chatTexture = new THREE.CanvasTexture(chatCanvas);
+  chatTexture.needsUpdate = true;
+  
+  // Material do texto
+  const textMaterial = new THREE.MeshBasicMaterial({
+    map: chatTexture,
+    transparent: true,
+    opacity: 1
+  });
+  
+  // Plano para o texto (ligeiramente na frente do painel)
+  const textGeometry = new THREE.PlaneGeometry(
+    CHAT_CONFIG.panel.width - 0.1,
+    CHAT_CONFIG.panel.height - 0.2
+  );
+  
+  const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+  textMesh.position.z = CHAT_CONFIG.panel.depth / 2 + 0.001;
+  chatPanel.add(textMesh);
+  
+  // Botões interativos
+  createChatButtons(chatGroup);
+  
+  // Toggle button (sempre visível em AR)
+  createToggleButton(chatGroup);
+  
+  chatGroup.add(chatPanel);
+  chatGroup.visible = false; // Começar oculto
+  
+  scene.add(chatGroup);
+  
+  console.log('Sistema de chat 3D criado');
+}
+
+function createChatCanvas() {
+  chatCanvas = document.createElement('canvas');
+  chatCanvas.width = 512;
+  chatCanvas.height = 683; // Proporção aproximada do painel
+  
+  chatContext = chatCanvas.getContext('2d');
+  
+  // Configurar fonte
+  chatContext.font = `${CHAT_CONFIG.text.fontSize}px Arial, sans-serif`;
+  chatContext.textAlign = 'left';
+  chatContext.textBaseline = 'top';
+  
+  updateChatCanvas();
+}
+
+function updateChatCanvas() {
+  if (!chatContext) return;
+  
+  // Limpar canvas
+  chatContext.clearRect(0, 0, chatCanvas.width, chatCanvas.height);
+  
+  // Fundo
+  chatContext.fillStyle = '#1e293b';
+  chatContext.fillRect(0, 0, chatCanvas.width, chatCanvas.height);
+  
+  // Header
+  chatContext.fillStyle = '#334155';
+  chatContext.fillRect(0, 0, chatCanvas.width, 60);
+  
+  // Título
+  chatContext.fillStyle = '#f1f5f9';
+  chatContext.font = 'bold 28px Arial';
+  chatContext.fillText('Assistente Pulmonar', 20, 20);
+  
+  chatContext.fillStyle = '#94a3b8';
+  chatContext.font = '18px Arial';
+  chatContext.fillText('Especializado em pulmão', 20, 45);
+  
+  // Área de mensagens
+  const messageAreaY = 80;
+  const messageAreaHeight = chatCanvas.height - 140;
+  
+  chatContext.fillStyle = '#0f172a';
+  chatContext.fillRect(10, messageAreaY, chatCanvas.width - 20, messageAreaHeight);
+  
+  // Renderizar mensagens
+  let y = messageAreaY + 10;
+  const maxWidth = chatCanvas.width - 40;
+  
+  for (let i = Math.max(0, chatMessages.length - CHAT_CONFIG.text.maxLines); i < chatMessages.length; i++) {
+    const message = chatMessages[i];
+    if (!message) continue;
+    
+    const isUser = message.type === 'user';
+    chatContext.fillStyle = isUser ? '#10b981' : '#f1f5f9';
+    chatContext.font = `${isUser ? 'bold ' : ''}20px Arial`;
+    
+    // Quebrar texto em múltiplas linhas se necessário
+    const words = message.text.split(' ');
+    let line = '';
+    
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = chatContext.measureText(testLine);
+      const testWidth = metrics.width;
+      
+      if (testWidth > maxWidth && n > 0) {
+        chatContext.fillText(line, 20, y);
+        line = words[n] + ' ';
+        y += CHAT_CONFIG.text.lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    chatContext.fillText(line, 20, y);
+    y += CHAT_CONFIG.text.lineHeight + 5;
+    
+    if (y > messageAreaY + messageAreaHeight - 30) break;
+  }
+  
+  // Input area
+  const inputY = chatCanvas.height - 50;
+  chatContext.fillStyle = '#334155';
+  chatContext.fillRect(10, inputY, chatCanvas.width - 20, 40);
+  
+  chatContext.fillStyle = '#94a3b8';
+  chatContext.font = '16px Arial';
+  chatContext.fillText('Use controles VR ou voz para interagir', 20, inputY + 15);
+  
+  // Atualizar texture
+  if (chatPanel) {
+    const textMesh = chatPanel.children.find(child => child.material && child.material.map);
+    if (textMesh && textMesh.material.map) {
+      textMesh.material.map.needsUpdate = true;
+    }
+  }
+}
+
+function createChatButtons(chatGroup) {
+  // Botão de enviar (será ativado por voz ou controles)
+  const sendButtonGeometry = new THREE.BoxGeometry(0.15, 0.08, 0.03);
+  const sendButtonMaterial = new THREE.MeshLambertMaterial({ 
+    color: CHAT_CONFIG.colors.button 
+  });
+  
+  chatSendButton = new THREE.Mesh(sendButtonGeometry, sendButtonMaterial);
+  chatSendButton.position.set(
+    CHAT_CONFIG.panel.position.x + 0.4,
+    CHAT_CONFIG.panel.position.y - 0.7,
+    CHAT_CONFIG.panel.position.z + 0.1
+  );
+  chatSendButton.name = 'ChatSendButton';
+  
+  // Label do botão
+  const sendLabelCanvas = document.createElement('canvas');
+  sendLabelCanvas.width = 128;
+  sendLabelCanvas.height = 64;
+  const sendLabelContext = sendLabelCanvas.getContext('2d');
+  sendLabelContext.fillStyle = '#ffffff';
+  sendLabelContext.font = 'bold 24px Arial';
+  sendLabelContext.textAlign = 'center';
+  sendLabelContext.fillText('🎤', 64, 35);
+  
+  const sendLabelTexture = new THREE.CanvasTexture(sendLabelCanvas);
+  const sendLabelMaterial = new THREE.MeshBasicMaterial({ 
+    map: sendLabelTexture, 
+    transparent: true 
+  });
+  const sendLabelGeometry = new THREE.PlaneGeometry(0.12, 0.06);
+  const sendLabel = new THREE.Mesh(sendLabelGeometry, sendLabelMaterial);
+  sendLabel.position.z = 0.02;
+  chatSendButton.add(sendLabel);
+  
+  chatGroup.add(chatSendButton);
+}
+
+function createToggleButton(chatGroup) {
+  // Botão para mostrar/ocultar chat
+  const toggleButtonGeometry = new THREE.SphereGeometry(0.05, 16, 8);
+  const toggleButtonMaterial = new THREE.MeshLambertMaterial({ 
+    color: CHAT_CONFIG.colors.button 
+  });
+  
+  chatToggleButton = new THREE.Mesh(toggleButtonGeometry, toggleButtonMaterial);
+  chatToggleButton.position.set(
+    CHAT_CONFIG.panel.position.x + 0.8,
+    CHAT_CONFIG.panel.position.y + 0.6,
+    CHAT_CONFIG.panel.position.z
+  );
+  chatToggleButton.name = 'ChatToggleButton';
+  
+  // Ícone do chat
+  const toggleIconCanvas = document.createElement('canvas');
+  toggleIconCanvas.width = 64;
+  toggleIconCanvas.height = 64;
+  const toggleIconContext = toggleIconCanvas.getContext('2d');
+  toggleIconContext.fillStyle = '#ffffff';
+  toggleIconContext.font = 'bold 32px Arial';
+  toggleIconContext.textAlign = 'center';
+  toggleIconContext.fillText('💬', 32, 40);
+  
+  const toggleIconTexture = new THREE.CanvasTexture(toggleIconCanvas);
+  const toggleIconMaterial = new THREE.MeshBasicMaterial({ 
+    map: toggleIconTexture, 
+    transparent: true 
+  });
+  const toggleIconGeometry = new THREE.PlaneGeometry(0.08, 0.08);
+  const toggleIcon = new THREE.Mesh(toggleIconGeometry, toggleIconMaterial);
+  toggleIcon.position.z = 0.02;
+  chatToggleButton.add(toggleIcon);
+  
+  chatGroup.add(chatToggleButton);
+}
+
+function toggleChatVisibility() {
+  if (!chatPanel) return;
+  
+  const chatGroup = scene.getObjectByName('ChatSystem');
+  if (chatGroup) {
+    chatIsVisible = !chatIsVisible;
+    chatPanel.visible = chatIsVisible;
+    
+    // Animação suave
+    if (chatIsVisible) {
+      chatPanel.scale.set(0.01, 0.01, 0.01);
+      const targetScale = new THREE.Vector3(1, 1, 1);
+      animateScale(chatPanel, targetScale, 300);
+    }
+    
+    console.log(`Chat 3D ${chatIsVisible ? 'exibido' : 'oculto'}`);
+  }
+}
+
+function animateScale(object, targetScale, duration) {
+  const startScale = object.scale.clone();
+  const startTime = Date.now();
+  
+  function animate() {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Easing
+    const eased = 1 - Math.pow(1 - progress, 3);
+    
+    object.scale.lerpVectors(startScale, targetScale, eased);
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    }
+  }
+  
+  animate();
+}
+
+function addChatMessage(text, type = 'bot') {
+  if (!text || typeof text !== 'string') return;
+  
+  const message = {
+    text: text.trim(),
+    type: type, // 'user' ou 'bot'
+    timestamp: Date.now()
+  };
+  
+  chatMessages.push(message);
+  
+  // Limitar número de mensagens
+  if (chatMessages.length > CHAT_CONFIG.text.maxLines * 2) {
+    chatMessages.splice(0, chatMessages.length - CHAT_CONFIG.text.maxLines * 2);
+  }
+  
+  updateChatCanvas();
+  console.log(`Nova mensagem no chat 3D: ${text.substring(0, 50)}...`);
+}
+
+function handleChatInteraction(controller) {
+  if (!controller || !renderer.xr.isPresenting) return;
+  
+  // Verificar interação com botões do chat
+  tempMatrix.identity().extractRotation(controller.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+  
+  const chatGroup = scene.getObjectByName('ChatSystem');
+  if (!chatGroup) return;
+  
+  const intersects = raycaster.intersectObjects(chatGroup.children, true);
+  
+  if (intersects.length > 0) {
+    const intersected = intersects[0].object;
+    const parent = intersected.parent;
+    
+    if (parent && parent.name === 'ChatToggleButton') {
+      toggleChatVisibility();
+      
+      // Feedback háptico
+      const gamepad = controller.gamepad;
+      if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
+        gamepad.hapticActuators[0].pulse(0.5, 100);
+      }
+      
+      return true;
+    }
+    
+    if (parent && parent.name === 'ChatSendButton' && chatIsVisible) {
+      // Ativar gravação de voz
+      startVoiceRecording();
+      
+      // Feedback háptico
+      const gamepad = controller.gamepad;
+      if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
+        gamepad.hapticActuators[0].pulse(0.7, 150);
+      }
+      
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// Sistema de voz integrado ao chat 3D
+let isRecording = false;
+let mediaRecorder = null;
+let audioChunks = [];
+
+async function startVoiceRecording() {
+  if (isRecording) return;
+  
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    
+    addChatMessage('🎤 Gravando...', 'user');
+    
+    mediaRecorder.ondataavailable = (event) => {
+      audioChunks.push(event.data);
+    };
+    
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      await sendVoiceMessage(audioBlob);
+      
+      // Parar stream
+      stream.getTracks().forEach(track => track.stop());
+    };
+    
+    mediaRecorder.start();
+    isRecording = true;
+    
+    // Parar automaticamente após 10 segundos
+    setTimeout(() => {
+      if (isRecording) {
+        stopVoiceRecording();
+      }
+    }, 10000);
+    
+  } catch (error) {
+    console.error('Erro ao iniciar gravação:', error);
+    addChatMessage('Erro: Não foi possível acessar o microfone', 'bot');
+  }
+}
+
+function stopVoiceRecording() {
+  if (!isRecording || !mediaRecorder) return;
+  
+  isRecording = false;
+  mediaRecorder.stop();
+  
+  addChatMessage('⏹️ Processando...', 'user');
+}
+
+async function sendVoiceMessage(audioBlob) {
+  try {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'recording.webm');
+    
+    const response = await fetch('/api/voice/chat', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Exibir transcrição
+    if (result.transcript) {
+      addChatMessage(result.transcript, 'user');
+    }
+    
+    // Exibir resposta
+    if (result.reply) {
+      addChatMessage(result.reply, 'bot');
+    }
+    
+    // Reproduzir áudio da resposta
+    if (result.audio_base64) {
+      playAudioResponse(result.audio_base64);
+    }
+    
+  } catch (error) {
+    console.error('Erro ao processar voz:', error);
+    addChatMessage('Erro ao processar áudio. Tente novamente.', 'bot');
+  }
+}
+
+function playAudioResponse(audioBase64) {
+  try {
+    const audioBlob = base64ToBlob(audioBase64, 'audio/mpeg');
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    
+    audio.play().catch(err => {
+      console.warn('Erro ao reproduzir áudio:', err);
+    });
+    
+    audio.onended = () => {
+      URL.revokeObjectURL(audioUrl);
+    };
+  } catch (error) {
+    console.error('Erro ao reproduzir resposta de áudio:', error);
+  }
+}
+
+function base64ToBlob(base64, type) {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return new Blob([bytes], { type });
+}
+
+// Resto do código original continua aqui...
 window.addEventListener('DOMContentLoaded', () => {
-  console.log('DOMContentLoaded - iniciando cena AR com ES Modules');
+  console.log('DOMContentLoaded - iniciando cena AR com Chat 3D integrado');
   init();
   animate();
 });
@@ -67,10 +575,10 @@ function init() {
     return;
   }
 
-  // Renderer com WebXR AR habilitado - CONFIGURAÇÕES PARA FUNDO TRANSPARENTE
+  // Renderer com WebXR AR habilitado
   renderer = new THREE.WebGLRenderer({ 
     antialias: true, 
-    alpha: true // Habilita transparência
+    alpha: true 
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const rect = container.getBoundingClientRect();
@@ -79,28 +587,26 @@ function init() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   
-  // CONFIGURAÇÕES CRUCIAIS PARA AR COM FUNDO TRANSPARENTE
-  renderer.setClearColor(0x000000, 0); // Cor preta com alpha 0 (transparente)
+  renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   
   container.appendChild(renderer.domElement);
 
-  // Cena - SEM background para permitir transparência
+  // Cena
   scene = new THREE.Scene();
-  // Para desktop, adicionar um fundo visível
   if (!renderer.xr.isPresenting) {
-    scene.background = new THREE.Color(0x1e293b); // Slate-800
+    scene.background = new THREE.Color(0x1e293b);
   }
 
-  // Câmera - Far plane aumentado para área maior
+  // Câmera
   camera = new THREE.PerspectiveCamera(70, rect.width / rect.height, 0.01, 200); 
   camera.position.set(0, 0.3, 0.5);
 
-  // Grupo para o modelo (permite manipulação)
+  // Grupo para o modelo
   group = new THREE.Group();
   scene.add(group);
 
-  // Luzes - ajustadas para AR com ambiente real
+  // Luzes
   const ambient = new THREE.AmbientLight(0xffffff, 0.8);
   scene.add(ambient);
   
@@ -117,33 +623,31 @@ function init() {
   dir1.shadow.camera.bottom = -20;
   scene.add(dir1);
 
-  // Luz adicional para melhor iluminação do modelo em AR
   const dir2 = new THREE.DirectionalLight(0xffffff, 0.6);
   dir2.position.set(-1, 1, -1);
   scene.add(dir2);
 
-  // Luz pontual para destacar o modelo
   const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
   pointLight.position.set(0, 1, 0);
   scene.add(pointLight);
 
-  // Criar área de movimento VR (boundary circle MUITO maior)
+  // Área de movimento VR
   const playAreaGeometry = new THREE.RingGeometry(Math.max(0.1, PLAY_AREA_RADIUS - 0.2), PLAY_AREA_RADIUS, 256); 
   const playAreaMaterial = new THREE.MeshBasicMaterial({ 
     color: 0x00ff00, 
-    opacity: 0.15, // Mais transparente devido ao tamanho maior
+    opacity: 0.15,
     transparent: true,
     side: THREE.DoubleSide
   });
   playArea = new THREE.Mesh(playAreaGeometry, playAreaMaterial);
   playArea.rotation.x = -Math.PI / 2;
-  playArea.position.y = 0.01; // Ligeiramente acima do chão
-  playArea.visible = false; // Inicialmente invisível
+  playArea.position.y = 0.01;
+  playArea.visible = false;
   scene.add(playArea);
 
-  // Grade de orientação para ajudar na orientação espacial
+  // Grade de orientação
   const gridHelper = new THREE.GridHelper(PLAY_AREA_RADIUS * 2, 50, 0x444444, 0x222222);
-  gridHelper.visible = false; // Inicialmente invisível, ativa em VR
+  gridHelper.visible = false;
   scene.add(gridHelper);
 
   // Marcador de teleporte
@@ -159,22 +663,7 @@ function init() {
   teleportMarker.visible = false;
   scene.add(teleportMarker);
 
-  // Adicionar anel ao redor do marcador de teleporte para melhor visibilidade
-  const RING_INNER = Math.max(TELEPORT_BASE_RADIUS * 0.9, TELEPORT_BASE_RADIUS - 0.02);
-  const RING_OUTER = Math.max(RING_INNER + 0.01, TELEPORT_BASE_RADIUS * 1.15);
-  const ringGeometry = new THREE.RingGeometry(RING_INNER, RING_OUTER, 32);
-  const ringMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0x00ffff, 
-    side: THREE.DoubleSide,
-    opacity: 0.8,
-    transparent: true
-  });
-  const teleportRing = new THREE.Mesh(ringGeometry, ringMaterial);
-  teleportRing.rotation.x = -Math.PI / 2;
-  teleportRing.position.y = 0.001;
-  teleportMarker.add(teleportRing);
-
-  // Reticle para posicionamento
+  // Reticle
   const RETICLE_INNER = Math.max(0.02, Math.min(PLAY_AREA_RADIUS * 0.005, 0.5));
   const RETICLE_OUTER = Math.max(RETICLE_INNER + 0.01, RETICLE_INNER * 1.3);
   const reticleGeometry = new THREE.RingGeometry(RETICLE_INNER, RETICLE_OUTER, 32).rotateX(-Math.PI / 2);
@@ -191,7 +680,6 @@ function init() {
   // Configuração dos controladores VR
   controllerModelFactory = new XRControllerModelFactory();
 
-  // Controlador 1 (mão direita geralmente)
   controller1 = renderer.xr.getController(0);
   controller1.addEventListener('selectstart', onSelectStart);
   controller1.addEventListener('selectend', onSelectEnd);
@@ -200,7 +688,6 @@ function init() {
   controller1.addEventListener('squeezeend', onSqueezeEnd);
   scene.add(controller1);
 
-  // Controlador 2 (mão esquerda geralmente)
   controller2 = renderer.xr.getController(1);
   controller2.addEventListener('selectstart', onSelectStart);
   controller2.addEventListener('selectend', onSelectEnd);
@@ -209,7 +696,6 @@ function init() {
   controller2.addEventListener('squeezeend', onSqueezeEnd);
   scene.add(controller2);
 
-  // Adicionar modelos visuais dos controladores
   controllerGrip1 = renderer.xr.getControllerGrip(0);
   controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
   scene.add(controllerGrip1);
@@ -218,7 +704,7 @@ function init() {
   controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
   scene.add(controllerGrip2);
 
-  // Adicionar linha/raio aos controladores para apontar
+  // Linha dos controladores
   const lineGeometry = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0, 0, 0),
     new THREE.Vector3(0, 0, -1)
@@ -260,10 +746,7 @@ function init() {
   controls.target.set(0, 0, 0);
   controls.enabled = !renderer.xr.isPresenting;
 
-  // Configuração AR
-  setupAR();
-
-  // Carrega o modelo
+  // Carregar modelo
   const loader = new GLTFLoader();
   loader.load(
     'models/lung.glb',
@@ -276,7 +759,6 @@ function init() {
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
-          // Melhora materiais para AR
           if (child.material) {
             child.material.envMapIntensity = 0.3;
             if (child.material.metalness !== undefined) {
@@ -342,77 +824,63 @@ function init() {
   raycaster = new THREE.Raycaster();
 }
 
-function setupAR() {
-  // Configuração básica para AR
-}
-
 function setupTouchInteraction() {
   const canvas = renderer.domElement;
   
-  // Touch events para movimentar e escalar o modelo em AR
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
   canvas.addEventListener('touchmove', onTouchMove, { passive: false });
   canvas.addEventListener('touchend', onTouchEnd, { passive: false });
 }
 
-// Funções de controle VR - MELHORADAS PARA MANIPULAÇÃO COMPLETA
+// Funções de controle VR - ATUALIZADAS PARA INCLUIR CHAT
 function onSelectStart(event) {
   const controller = event.target;
+  
+  // Verificar primeiro se é interação com chat
+  if (handleChatInteraction(controller)) {
+    return; // Chat tratou a interação
+  }
+  
   const otherController = controller === controller1 ? controller2 : controller1;
   
-  // Verificar se o outro controle já está agarrando
   if (isGrabbing && grabbingController === otherController) {
-    // Ambos os controles estão agarrando agora
     isGrabbingWithBothControllers = true;
-    
-    // Armazenar distância inicial entre controles
     initialControllersDistance = controller.position.distanceTo(otherController.position);
     initialModelScale.copy(group.scale);
     controller1InitialPos.copy(controller1.position);
     controller2InitialPos.copy(controller2.position);
-    
     console.log('Manipulação com dois controles iniciada');
     return;
   }
   
   if (isTeleporting && teleportMarker.visible) {
-    // Executar teleporte
     const xrCamera = renderer.xr.getCamera();
-    const currentY = xrCamera.position.y;
-    
-    // Calcular offset da posição atual para o marcador
     const offsetX = teleportMarker.position.x - xrCamera.position.x;
     const offsetZ = teleportMarker.position.z - xrCamera.position.z;
     
-    // Aplicar o teleporte mantendo a altura
     xrCamera.position.x += offsetX;
     xrCamera.position.z += offsetZ;
     
     console.log(`Teleportado para: x=${teleportMarker.position.x}, z=${teleportMarker.position.z}`);
     
-    // Feedback háptico para confirmar teleporte
     const gamepad = controller.gamepad;
     if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
       gamepad.hapticActuators[0].pulse(0.8, 200);
     }
-    
     return;
   }
 
-  // Verificar se está apontando para o modelo ou próximo dele
+  // Verificar se está apontando para o modelo
   const intersections = getIntersections(controller);
   const distanceToModel = group.position.distanceTo(controller.position);
   
   if (intersections.length > 0 || distanceToModel < 2.0) {
-    // Começar a agarrar o objeto
     isGrabbing = true;
     grabbingController = controller;
     
-    // Armazenar posição inicial
     previousControllerPosition.copy(controller.position);
     previousControllerQuaternion.copy(controller.quaternion);
     
-    // Destacar modelo selecionado
     if (lungRoot) {
       lungRoot.traverse((child) => {
         if (child.isMesh && child.material) {
@@ -422,7 +890,6 @@ function onSelectStart(event) {
       });
     }
     
-    // Feedback háptico se disponível
     const gamepad = controller.gamepad;
     if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
       gamepad.hapticActuators[0].pulse(0.6, 100);
@@ -436,9 +903,7 @@ function onSelectEnd(event) {
   const controller = event.target;
   
   if (isGrabbingWithBothControllers) {
-    // Se estava usando dois controles, agora continua com apenas um
     isGrabbingWithBothControllers = false;
-    // O controle que soltou deixa de agarrar, mas o outro continua
     if (grabbingController === controller) {
       grabbingController = controller === controller1 ? controller2 : controller1;
       if (!grabbingController || !isGrabbing) {
@@ -447,11 +912,9 @@ function onSelectEnd(event) {
     }
     console.log('Manipulação com dois controles finalizada');
   } else if (isGrabbing && grabbingController === controller) {
-    // Parar de agarrar completamente
     isGrabbing = false;
     grabbingController = null;
     
-    // Remover destaque
     if (lungRoot) {
       lungRoot.traverse((child) => {
         if (child.isMesh && child.material) {
@@ -466,11 +929,9 @@ function onSelectEnd(event) {
 }
 
 function onSqueeze(event) {
-  // Apertar o gatilho lateral para teleporte
   const controller = event.target;
   isTeleporting = true;
   
-  // Mudar cor da linha para indicar modo teleporte
   const line = controller.getObjectByName('line');
   if (line) {
     line.material.color.setHex(0x00ffff);
@@ -480,9 +941,8 @@ function onSqueeze(event) {
 
 function onSqueezeStart(event) {
   isTeleporting = true;
-  playArea.visible = true; // Mostrar área de movimento
+  playArea.visible = true;
   
-  // Feedback háptico para indicar modo teleporte
   const controller = event.target;
   const gamepad = controller.gamepad;
   if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
@@ -496,7 +956,6 @@ function onSqueezeEnd(event) {
   teleportMarker.visible = false;
   playArea.visible = false;
   
-  // Restaurar cor da linha
   const line = controller.getObjectByName('line');
   if (line) {
     line.material.color.setHex(0xffffff);
@@ -517,30 +976,25 @@ const MOVE_SENSITIVITY = 1.5;
 
 function handleController(controller) {
   if (isTeleporting) {
-    // Modo teleporte - mostrar marcador onde o raio atinge o chão
     tempMatrix.identity().extractRotation(controller.matrixWorld);
     
     raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
     raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
     
-    // Criar um plano no chão para interseção
     const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const intersection = new THREE.Vector3();
     
     if (raycaster.ray.intersectPlane(floorPlane, intersection)) {
-      // Verificar se está dentro da área de movimento expandida
       const distance = Math.sqrt(intersection.x * intersection.x + intersection.z * intersection.z);
       if (distance <= PLAY_AREA_RADIUS) {
         teleportMarker.position.copy(intersection);
         teleportMarker.position.y = 0.025;
         teleportMarker.visible = true;
         
-        // Indicador visual de distância - cor varia conforme distância
         const normalizedDistance = distance / PLAY_AREA_RADIUS;
         const hue = 0.5 - normalizedDistance * 0.5;
         teleportMarker.material.color.setHSL(hue, 1, 0.5);
         
-        // Animação do marcador
         const scale = 1 + Math.sin(Date.now() * 0.003) * 0.1;
         teleportMarker.scale.set(scale, 1, scale);
       } else {
@@ -548,36 +1002,26 @@ function handleController(controller) {
       }
     }
   } else if (isGrabbingWithBothControllers) {
-    // Manipulação com dois controles - escala e rotação mais precisa
     const currentDistance = controller1.position.distanceTo(controller2.position);
     const scaleFactor = currentDistance / initialControllersDistance;
     
-    // Aplicar escala com limites expandidos
     const newScale = Math.max(0.05, Math.min(10, initialModelScale.x * scaleFactor));
     group.scale.set(newScale, newScale, newScale);
     
-    // Calcular rotação baseada no movimento dos controles
     const midPoint = new THREE.Vector3();
     midPoint.addVectors(controller1.position, controller2.position).multiplyScalar(MOVE_SENSITIVITY);
     
-    // Mover o modelo para o ponto médio entre os controles
     group.position.copy(midPoint);
     
-    // Rotação baseada na orientação entre controles
     const direction = new THREE.Vector3();
     direction.subVectors(controller2.position, controller1.position).normalize();
     
-    // Calcular ângulo de rotação
     const targetRotation = Math.atan2(direction.x, direction.z);
-    
-    // Aplicar rotação suave com interpolação
     group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetRotation, 0.15);
     
-    // Permitir rotação em outros eixos baseado na inclinação dos controles
     const verticalAngle = Math.asin(direction.y);
     group.rotation.x = THREE.MathUtils.lerp(group.rotation.x, verticalAngle * 0.5, 0.1);
     
-    // Feedback háptico contínuo em ambos controles
     [controller1, controller2].forEach(ctrl => {
       const gamepad = ctrl.gamepad;
       if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
@@ -586,30 +1030,23 @@ function handleController(controller) {
     });
     
   } else if (isGrabbing && grabbingController === controller) {
-    // Modo agarrar com um controle - mover e rotar o modelo
     const deltaMove = new THREE.Vector3();
     deltaMove.copy(controller.position).sub(previousControllerPosition);
     
-    // Mover o grupo com sensibilidade ajustada
     group.position.add(deltaMove.multiplyScalar(MOVE_SENSITIVITY));
     
-    // Calcular rotação baseada no movimento do controle
     const deltaRotation = new THREE.Quaternion();
     deltaRotation.copy(controller.quaternion).multiply(previousControllerQuaternion.clone().invert());
     
-    // Aplicar rotação com suavização maior
     const targetQuaternion = new THREE.Quaternion();
     targetQuaternion.multiplyQuaternions(deltaRotation, group.quaternion);
     group.quaternion.slerp(targetQuaternion, 0.4);
     
-    // Atualizar posições anteriores
     previousControllerPosition.copy(controller.position);
     previousControllerQuaternion.copy(controller.quaternion);
     
-    // Feedback háptico contínuo suave
     const gamepad = controller.gamepad;
     if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
-      // Intensidade baseada na velocidade do movimento
       const velocity = deltaMove.length();
       const intensity = Math.min(0.3, velocity * 2);
       if (intensity > 0.05) {
@@ -618,21 +1055,19 @@ function handleController(controller) {
     }
   }
   
-  // Atualizar visual do raio baseado no estado
   const line = controller.getObjectByName('line');
   if (line) {
     if (isGrabbing && grabbingController === controller) {
       line.material.opacity = 0.9;
-      line.scale.z = 3; // Raio mais curto quando agarrando
-      line.material.color.setHex(0x00ff00); // Verde quando agarrando
+      line.scale.z = 3;
+      line.material.color.setHex(0x00ff00);
     } else if (isTeleporting) {
       line.material.opacity = 0.7;
-      line.scale.z = 20; // Raio muito mais longo para teleporte na área expandida
-      // Cor já definida em onSqueeze
+      line.scale.z = 20;
     } else {
       line.material.opacity = 0.4;
-      line.scale.z = 10; // Tamanho normal
-      line.material.color.setHex(0xffffff); // Branco padrão
+      line.scale.z = 10;
+      line.material.color.setHex(0xffffff);
     }
   }
 }
@@ -645,10 +1080,8 @@ function onTouchStart(event) {
   touches = Array.from(event.touches);
   
   if (touches.length === 1) {
-    // Um toque - prepara para mover o modelo
     isMovingModel = true;
   } else if (touches.length === 2) {
-    // Dois toques - prepara para escalar (pinch zoom)
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
     initialTouchDistance = Math.sqrt(dx * dx + dy * dy);
@@ -664,35 +1097,28 @@ function onTouchMove(event) {
   touches = Array.from(event.touches);
   
   if (touches.length === 1 && isMovingModel) {
-    // Um toque - move o modelo na tela
     const touch = touches[0];
     const x = (touch.clientX / window.innerWidth) * 2 - 1;
     const y = -(touch.clientY / window.innerHeight) * 2 + 1;
     
-    // Criar um raio da câmera através do ponto tocado
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
     
-    // Calcular ponto no plano a 1 metro de distância
     const planeDistance = 1.0;
     const direction = new THREE.Vector3();
     raycaster.ray.direction.normalize();
     direction.copy(raycaster.ray.direction).multiplyScalar(planeDistance);
     
-    // Atualizar posição do modelo
     group.position.copy(camera.position).add(direction);
     
   } else if (touches.length === 2) {
-    // Dois toques - escalar o modelo (pinch to zoom)
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
     const scale = (distance / initialTouchDistance) * initialScale;
-    // Limitar escala entre 0.1 e 5
     const clampedScale = Math.max(0.1, Math.min(5, scale));
     group.scale.set(clampedScale, clampedScale, clampedScale);
     
-    // Rotação com dois dedos
     const centerX = (touches[0].clientX + touches[1].clientX) / 2;
     const angle = Math.atan2(dy, dx);
     if (this.lastAngle !== undefined) {
@@ -721,10 +1147,8 @@ function centerAndScaleModel(root) {
   box.getSize(size);
   box.getCenter(center);
 
-  // Centraliza na origem
   root.position.sub(center);
 
-  // Escala para 30cm de altura (maior para melhor visibilidade)
   const targetHeight = 0.30;
   const currentHeight = size.y || 1.0;
   const scale = targetHeight / currentHeight;
@@ -735,11 +1159,9 @@ function centerAndScaleModel(root) {
 
 function resetCamera() {
   if (renderer.xr.isPresenting) {
-    // Em AR/VR, reseta a posição do modelo para frente da câmera
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     
-    // Posiciona o modelo a 0.5 metros de distância (mais próximo)
     group.position.copy(camera.position);
     group.position.add(cameraDirection.multiplyScalar(MOVE_SENSITIVITY));
     group.position.y = camera.position.y - 0.15;
@@ -751,7 +1173,6 @@ function resetCamera() {
     
     console.log('Modelo reposicionado em AR/VR');
   } else {
-    // Desktop
     camera.position.set(0, 0.3, 0.5);
     controls.target.set(0, 0, 0);
     controls.update();
@@ -760,41 +1181,38 @@ function resetCamera() {
 }
 
 function onXRSessionStart() {
-  console.log('AR/VR Session iniciada');
+  console.log('AR/VR Session iniciada - Chat 3D ativado');
   isInARMode = true;
   controls.enabled = false;
   isModelPlaced = false;
   
-  // Remove o fundo da cena para AR
   scene.background = null;
-  
-  // Garante que o fundo seja totalmente transparente durante AR
   renderer.setClearColor(0x000000, 0);
+  playArea.visible = false;
   
-  // Mostrar área de movimento em VR (visibilidade reduzida)
-  playArea.visible = false; // Começa invisível, aparece apenas com squeeze
+  // Criar sistema de chat 3D
+  create3DChatSystem();
   
-  // Posiciona o modelo automaticamente na frente da câmera
+  // Posicionar modelo automaticamente
   setTimeout(() => {
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     
-    // Posiciona o modelo a 0.5 metros de distância
     group.position.copy(camera.position);
     group.position.add(cameraDirection.multiplyScalar(MOVE_SENSITIVITY));
     group.position.y = camera.position.y - 0.15;
     
-    // Torna o modelo visível
     group.visible = true;
     isModelPlaced = true;
     
     console.log('Modelo posicionado automaticamente em AR/VR');
     
-    // Mostra instruções de interação
+    // Mostrar mensagem de boas-vindas no chat 3D
+    addChatMessage('Olá! Sou seu assistente pulmonar. Use os controles VR para interagir comigo ou pressione o botão de voz.', 'bot');
+    
     showARInstructions();
   }, 1000);
 
-  // Inicializa hit testing para reposicionamento opcional
   const session = renderer.xr.getSession();
   
   session.requestReferenceSpace('viewer').then((referenceSpace) => {
@@ -810,7 +1228,6 @@ function onXRSessionStart() {
     hitTestSource = null;
   });
 
-  // Dispara evento personalizado para sistema de chat
   window.dispatchEvent(new CustomEvent('xrsessionstart'));
 }
 
@@ -819,14 +1236,14 @@ function showARInstructions() {
   if (arInstructions) {
     arInstructions.innerHTML = `
       <div style="background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; color: white;">
-        <p>🎮 <strong>Controles Meta Quest 2:</strong></p>
-        <p>• <strong>Gatilho principal:</strong> Agarrar e mover o modelo 3D</p>
-        <p>• <strong>Gatilho lateral:</strong> Ativar teleporte (área de ${PLAY_AREA_RADIUS}m de raio)</p>
+        <p>🎮 <strong>Controles Meta Quest 2 + Chat 3D:</strong></p>
+        <p>• <strong>Gatilho principal:</strong> Agarrar modelo OU interagir com chat 3D</p>
+        <p>• <strong>Gatilho lateral:</strong> Ativar teleporte (área de ${PLAY_AREA_RADIUS}m)</p>
+        <p>• <strong>Botão Chat (💬):</strong> Mostrar/ocultar painel de chat 3D</p>
+        <p>• <strong>Botão Microfone (🎤):</strong> Gravar mensagem de voz</p>
         <p>• <strong>Ambos controles:</strong> Escalar e rotar com precisão</p>
-        <p>• <strong>Botão Resetar:</strong> Reposicionar modelo na frente</p>
-        <p>• <strong>Botão Chat:</strong> Abrir assistente especializado</p>
         <br>
-        <p style="color: #00ff00;">✅ Área de movimento: ${PLAY_AREA_RADIUS * 2}m de diâmetro disponível!</p>
+        <p style="color: #10b981;">✨ Chat 3D integrado ao ambiente AR!</p>
       </div>
     `;
     arInstructions.classList.remove('hidden');
@@ -836,7 +1253,6 @@ function showARInstructions() {
     arInstructions.style.transform = 'translateX(-50%)';
     arInstructions.style.zIndex = '1000';
     
-    // Remove instruções após 15 segundos
     setTimeout(() => {
       arInstructions.classList.add('hidden');
     }, 15000);
@@ -844,7 +1260,7 @@ function showARInstructions() {
 }
 
 function onXRSessionEnd() {
-  console.log('AR/VR Session finalizada');
+  console.log('AR/VR Session finalizada - Chat 3D desativado');
   isInARMode = false;
   controls.enabled = true;
   group.visible = true;
@@ -858,11 +1274,18 @@ function onXRSessionEnd() {
   isTeleporting = false;
   teleportMarker.visible = false;
   
-  // Restaura o fundo para visualização desktop
+  // Remover chat 3D
+  const chatGroup = scene.getObjectByName('ChatSystem');
+  if (chatGroup) {
+    scene.remove(chatGroup);
+    chatPanel = null;
+    chatIsVisible = false;
+    console.log('Sistema de chat 3D removido');
+  }
+  
   scene.background = new THREE.Color(0x1e293b);
   renderer.setClearColor(0x1e293b, 1);
 
-  // Dispara evento personalizado para sistema de chat
   window.dispatchEvent(new CustomEvent('xrsessionend'));
 }
 
@@ -875,33 +1298,6 @@ function onWindowResize() {
 }
 
 function animate() {
-  // Desktop: allow moving model when Alt + drag
-  let isMouseDragging = false;
-  let lastMousePos = new THREE.Vector2();
-  renderer.domElement.addEventListener('mousedown', (e) => {
-    if (e.altKey) {
-      isMouseDragging = true;
-      lastMousePos.set(e.clientX, e.clientY);
-      controls.enabled = false;
-    }
-  });
-  renderer.domElement.addEventListener('mousemove', (e) => {
-    if (isMouseDragging && selectedObject) {
-      const deltaX = (e.clientX - lastMousePos.x) / window.innerWidth;
-      const deltaY = (e.clientY - lastMousePos.y) / window.innerHeight;
-      // move on XZ plane
-      selectedObject.position.x += deltaX * 10 * MOVE_SENSITIVITY;
-      selectedObject.position.z -= deltaY * 10 * MOVE_SENSITIVITY;
-      lastMousePos.set(e.clientX, e.clientY);
-    }
-  });
-  renderer.domElement.addEventListener('mouseup', (e) => {
-    if (isMouseDragging) {
-      isMouseDragging = false;
-      controls.enabled = true;
-    }
-  });
-
   renderer.setAnimationLoop(render);
 }
 
@@ -912,7 +1308,7 @@ function render() {
     handleController(controller2);
   }
   
-  // Hit testing opcional para reposicionamento
+  // Hit testing opcional
   if (renderer.xr.isPresenting && hitTestSource && !isModelPlaced) {
     const frame = renderer.xr.getFrame();
     const hitTestResults = frame.getHitTestResults(hitTestSource);
@@ -926,24 +1322,19 @@ function render() {
     }
   }
 
-  // Atualiza controles desktop
   if (controls && controls.enabled) {
     controls.update();
   }
   
-  // Animação do placeholder
   if (placeholderMesh) {
     placeholderMesh.rotation.y += 0.01;
   }
   
-  // Animação suave de rotação quando não selecionado (apenas em desktop)
-  if (lungRoot && !selectedObject && !renderer.xr.isPresenting && !isGrabbing) {
+  if (lungRoot && !isGrabbing && !renderer.xr.isPresenting) {
     lungRoot.rotation.y += 0.002;
   }
   
-  // Animação do teleport marker quando visível
   if (teleportMarker && teleportMarker.visible) {
-    // Animação de rotação do anel
     const ring = teleportMarker.children[0];
     if (ring) {
       ring.rotation.z += 0.02;
@@ -953,20 +1344,19 @@ function render() {
   renderer.render(scene, camera);
 }
 
-// Log de erros
 window.addEventListener('error', (e) => {
   console.error('GlobalError:', e.message, e.filename, e.lineno);
 });
 
 console.log(`
 ===========================================
-AR/VR Scene Initialized with Chat Integration
+AR/VR Scene + 3D Chat System Initialized
 ===========================================
-• Play Area: ${PLAY_AREA_RADIUS * 2}m diameter (${PLAY_AREA_RADIUS}m radius)
+• Play Area: ${PLAY_AREA_RADIUS * 2}m diameter
 • Meta Quest 2 Controls: Fully Enabled
+• 3D Chat System: Integrated in AR Environment
+• Voice Recognition: Active
 • Teleport System: Active
 • Dual Controller Manipulation: Active
-• AR Chat Overlay: Integrated
-• Max Far Plane: 200m
 ===========================================
 `);
