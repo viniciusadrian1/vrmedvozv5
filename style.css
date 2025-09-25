@@ -134,30 +134,3 @@ main { flex: 1; position: relative; }
     border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
   }
 }
-
-/* XR overlay styles injected by assistant */
-
-/* XR DOM overlay root to allow HTML overlays during AR sessions */
-.xr-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: auto;
-  z-index: 9999;
-  display: flex;
-  justify-content: flex-end;
-  align-items: stretch;
-  /* allow child elements to be seen over the AR canvas */
-}
-@media (max-width: 768px) {
-  /* on mobile, keep chat at bottom when in handheld AR */
-  .xr-overlay aside {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    position: fixed !important;
-    bottom: 0 !important;
-    top: auto !important;
-    height: 40vh !important;
-    border-left: none !important;
-    border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
-  }
-}
