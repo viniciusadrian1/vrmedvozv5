@@ -24,7 +24,7 @@
       <div id="canvas-container" class="w-full h-full"></div>
 
       <!-- Barra superior -->
-      <div class="absolute top-4 left-4 right-4 flex items-center gap-2">
+      <div class="absolute top-4 left-4 right-4 flex items-center gap-2" id="topControls">
         <div class="px-3 py-2 rounded bg-slate-800/70 backdrop-blur border border-slate-700 text-sm">
           <span class="font-semibold">AR Med</span> · Visualização 3D/AR do pulmão
         </div>
@@ -32,6 +32,7 @@
           <button id="resetCameraBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Resetar câmera</button>
           <button id="toggleAxesBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Linhas (eixos)</button>
           <button id="mouseModeBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Modo Mouse</button>
+          <button id="toggleChatBtn" class="px-3 py-2 rounded bg-emerald-800 hover:bg-emerald-700 border border-emerald-700 text-sm hidden">💬 Chat</button>
           <!-- O botão AR será injetado aqui -->
           <div id="arButtonContainer"></div>
         </div>
@@ -42,10 +43,37 @@
         <p>📱 O modelo 3D do pulmão aparecerá automaticamente à sua frente</p>
         <p class="text-xs mt-1 text-slate-400">Use o botão "Resetar câmera" para reposicionar o modelo</p>
       </div>
+
+      <!-- Chat AR Overlay - Inicialmente oculto -->
+      <div id="arChatOverlay" class="absolute top-1/2 left-4 transform -translate-y-1/2 w-80 max-w-[90vw] bg-slate-900/95 backdrop-blur-lg border border-slate-700/50 rounded-lg shadow-2xl hidden">
+        <div class="flex items-center justify-between p-3 border-b border-slate-700/50">
+          <div>
+            <h3 class="text-sm font-semibold text-white">Assistente Pulmonar</h3>
+            <p class="text-xs text-slate-300">Especializado em pulmão</p>
+          </div>
+          <button id="closeChatAR" class="text-slate-400 hover:text-white p-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        
+        <div id="arChatMessages" class="h-64 overflow-auto p-3 space-y-2 custom-scroll"></div>
+        
+        <div class="p-3 border-t border-slate-700/50">
+          <div class="flex gap-2">
+            <input id="arChatInput" type="text" placeholder="Pergunte sobre pulmão..." class="flex-1 px-2 py-1 text-sm rounded bg-slate-800/80 border border-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-400" />
+            <button id="arRecordBtn" type="button" class="px-2 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-xs" title="Falar">
+              🎤
+            </button>
+            <button id="arSendBtn" type="button" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Enviar</button>
+          </div>
+        </div>
+      </div>
     </main>
 
-    <!-- Painel de chat -->
-    <aside class="w-[380px] max-w-[90vw] border-l border-slate-800 bg-slate-900/90 backdrop-blur p-4 flex flex-col gap-3">
+    <!-- Painel de chat desktop - Oculto em AR -->
+    <aside class="w-[380px] max-w-[90vw] border-l border-slate-800 bg-slate-900/90 backdrop-blur p-4 flex flex-col gap-3" id="desktopChat">
       <div>
         <h1 class="text-lg font-semibold">Assistente Pulmonar</h1>
         <p class="text-xs text-slate-300">Especializado em pulmão e suas patologias.</p>
@@ -60,50 +88,71 @@
           🎤 Falar
         </button>
         <button id="sendBtn" type="submit" class="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white">Enviar</button>
-      <div id="recordContainer" class="ml-2"></div></form>
+      </form>
     </aside>
   </div>
 
   <script type="module" src="main.js"></script>
   <script defer src="chat.js"></script>
 
-<script>
-// move the record button into the form once DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  const container = document.getElementById('recordContainer');
-  const sendBtn = document.getElementById('sendBtn');
-  if (container && window.recordBtn) {
-    container.appendChild(window.recordBtn);
-  }
-
-  // Mostra instruções AR quando a sessão começar
-  const arInstructions = document.getElementById('arInstructions');
-  if (arInstructions) {
-    // Este código será executado quando o AR iniciar
-    const showARInstructions = () => {
-      arInstructions.classList.remove('hidden');
-      setTimeout(() => {
-        arInstructions.classList.add('hidden');
-      }, 8000); // Remove instruções após 8 segundos
+  <script>
+    // Variáveis globais para controle do chat AR
+    window.arChatVisible = false;
+    
+    // Funções de chat AR
+    window.toggleARChat = function() {
+      const overlay = document.getElementById('arChatOverlay');
+      const toggleBtn = document.getElementById('toggleChatBtn');
+      
+      window.arChatVisible = !window.arChatVisible;
+      
+      if (window.arChatVisible) {
+        overlay.classList.remove('hidden');
+        toggleBtn.textContent = '❌ Fechar';
+        toggleBtn.classList.remove('bg-emerald-800', 'hover:bg-emerald-700');
+        toggleBtn.classList.add('bg-red-800', 'hover:bg-red-700');
+      } else {
+        overlay.classList.add('hidden');
+        toggleBtn.textContent = '💬 Chat';
+        toggleBtn.classList.remove('bg-red-800', 'hover:bg-red-700');
+        toggleBtn.classList.add('bg-emerald-800', 'hover:bg-emerald-700');
+      }
     };
 
-    // Escuta o evento personalizado de início de sessão XR
-    window.addEventListener('xrsessionstart', showARInstructions);
-    
-    // Também escuta mudanças no renderer (fallback)
-    const checkARSession = setInterval(() => {
-      const canvas = document.querySelector('#canvas-container canvas');
-      if (canvas && canvas.classList.contains('xr-presenting')) {
-        showARInstructions();
-        clearInterval(checkARSession);
-      }
-    }, 500);
-    
-    // Para após 10 segundos para economizar recursos
-    setTimeout(() => clearInterval(checkARSession), 10000);
-  }
-});
-</script>
+    // Controle de visibilidade baseado no modo AR
+    document.addEventListener('DOMContentLoaded', () => {
+      const toggleChatBtn = document.getElementById('toggleChatBtn');
+      const closeChatAR = document.getElementById('closeChatAR');
+      
+      // Event listeners para botões do chat AR
+      toggleChatBtn.addEventListener('click', window.toggleARChat);
+      closeChatAR.addEventListener('click', window.toggleARChat);
 
+      // Mostrar instruções AR quando a sessão começar
+      const arInstructions = document.getElementById('arInstructions');
+      if (arInstructions) {
+        const showARInstructions = () => {
+          arInstructions.classList.remove('hidden');
+          setTimeout(() => {
+            arInstructions.classList.add('hidden');
+          }, 8000);
+        };
+
+        // Escuta o evento personalizado de início de sessão XR
+        window.addEventListener('xrsessionstart', showARInstructions);
+        
+        // Também escuta mudanças no renderer (fallback)
+        const checkARSession = setInterval(() => {
+          const canvas = document.querySelector('#canvas-container canvas');
+          if (canvas && canvas.classList.contains('xr-presenting')) {
+            showARInstructions();
+            clearInterval(checkARSession);
+          }
+        }, 500);
+        
+        setTimeout(() => clearInterval(checkARSession), 10000);
+      }
+    });
+  </script>
 </body>
 </html>

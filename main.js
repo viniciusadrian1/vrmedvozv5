@@ -38,7 +38,7 @@ let controller2InitialPos = new THREE.Vector3();
 
 // Área de movimento VR (boundary circle) - AUMENTADO SIGNIFICATIVAMENTE
 let playArea;
-const PLAY_AREA_RADIUS = 25.0; // Ajustado para 25 metros (unidades AR = metros) // Aumentado para 25m de raio (50m de diâmetro)
+const PLAY_AREA_RADIUS = 25.0; // Ajustado para 25 metros (unidades AR = metros)
 
 // Teleport
 let teleportMarker;
@@ -49,6 +49,9 @@ let isMovingModel = false;
 let initialTouchDistance = 0;
 let initialScale = 1;
 let touches = [];
+
+// Variáveis para controle da interface AR
+let isInARMode = false;
 
 window.addEventListener('DOMContentLoaded', () => {
   console.log('DOMContentLoaded - iniciando cena AR com ES Modules');
@@ -175,7 +178,6 @@ function init() {
   const RETICLE_INNER = Math.max(0.02, Math.min(PLAY_AREA_RADIUS * 0.005, 0.5));
   const RETICLE_OUTER = Math.max(RETICLE_INNER + 0.01, RETICLE_INNER * 1.3);
   const reticleGeometry = new THREE.RingGeometry(RETICLE_INNER, RETICLE_OUTER, 32).rotateX(-Math.PI / 2);
-  // Reticle escala com PLAY_AREA_RADIUS para ficar visível em áreas maiores
   const reticleMaterial = new THREE.MeshBasicMaterial({
     color: 0x00ff00,
     transparent: true,
@@ -230,7 +232,7 @@ function init() {
   
   const line1 = new THREE.Line(lineGeometry, lineMaterial);
   line1.name = 'line';
-  line1.scale.z = Math.min(Math.max(10, PLAY_AREA_RADIUS * 0.5), 100); // Ajusta alcance do raio com base na área de jogo
+  line1.scale.z = Math.min(Math.max(10, PLAY_AREA_RADIUS * 0.5), 100);
   controller1.add(line1.clone());
   
   const line2 = new THREE.Line(lineGeometry, lineMaterial);
@@ -402,7 +404,7 @@ function onSelectStart(event) {
   const distanceToModel = group.position.distanceTo(controller.position);
   
   if (intersections.length > 0 || distanceToModel < 2.0) {
-    // Começar a agarrar o objeto (mesmo se não houver interseção direta, mas estiver próximo)
+    // Começar a agarrar o objeto
     isGrabbing = true;
     grabbingController = controller;
     
@@ -511,7 +513,7 @@ function getIntersections(controller) {
   return raycaster.intersectObjects(group.children, true);
 }
 
-const MOVE_SENSITIVITY = 1.5; // aumentado para resposta mais perceptível nos controles
+const MOVE_SENSITIVITY = 1.5;
 
 function handleController(controller) {
   if (isTeleporting) {
@@ -535,7 +537,7 @@ function handleController(controller) {
         
         // Indicador visual de distância - cor varia conforme distância
         const normalizedDistance = distance / PLAY_AREA_RADIUS;
-        const hue = 0.5 - normalizedDistance * 0.5; // De cyan (próximo) para verde (longe)
+        const hue = 0.5 - normalizedDistance * 0.5;
         teleportMarker.material.color.setHSL(hue, 1, 0.5);
         
         // Animação do marcador
@@ -636,7 +638,7 @@ function handleController(controller) {
 }
 
 function onTouchStart(event) {
-    event.preventDefault && event.preventDefault();
+  event.preventDefault && event.preventDefault();
   if (!renderer.xr.isPresenting) return;
   
   event.preventDefault();
@@ -655,7 +657,7 @@ function onTouchStart(event) {
 }
 
 function onTouchMove(event) {
-    event.preventDefault && event.preventDefault();
+  event.preventDefault && event.preventDefault();
   if (!renderer.xr.isPresenting || !isModelPlaced) return;
   
   event.preventDefault();
@@ -702,7 +704,7 @@ function onTouchMove(event) {
 }
 
 function onTouchEnd(event) {
-    event.preventDefault && event.preventDefault();
+  event.preventDefault && event.preventDefault();
   event.preventDefault();
   touches = Array.from(event.touches);
   
@@ -759,6 +761,7 @@ function resetCamera() {
 
 function onXRSessionStart() {
   console.log('AR/VR Session iniciada');
+  isInARMode = true;
   controls.enabled = false;
   isModelPlaced = false;
   
@@ -806,6 +809,9 @@ function onXRSessionStart() {
     hitTestSourceRequested = false;
     hitTestSource = null;
   });
+
+  // Dispara evento personalizado para sistema de chat
+  window.dispatchEvent(new CustomEvent('xrsessionstart'));
 }
 
 function showARInstructions() {
@@ -818,6 +824,7 @@ function showARInstructions() {
         <p>• <strong>Gatilho lateral:</strong> Ativar teleporte (área de ${PLAY_AREA_RADIUS}m de raio)</p>
         <p>• <strong>Ambos controles:</strong> Escalar e rotar com precisão</p>
         <p>• <strong>Botão Resetar:</strong> Reposicionar modelo na frente</p>
+        <p>• <strong>Botão Chat:</strong> Abrir assistente especializado</p>
         <br>
         <p style="color: #00ff00;">✅ Área de movimento: ${PLAY_AREA_RADIUS * 2}m de diâmetro disponível!</p>
       </div>
@@ -838,6 +845,7 @@ function showARInstructions() {
 
 function onXRSessionEnd() {
   console.log('AR/VR Session finalizada');
+  isInARMode = false;
   controls.enabled = true;
   group.visible = true;
   reticle.visible = false;
@@ -853,6 +861,9 @@ function onXRSessionEnd() {
   // Restaura o fundo para visualização desktop
   scene.background = new THREE.Color(0x1e293b);
   renderer.setClearColor(0x1e293b, 1);
+
+  // Dispara evento personalizado para sistema de chat
+  window.dispatchEvent(new CustomEvent('xrsessionend'));
 }
 
 function onWindowResize() {
@@ -864,35 +875,34 @@ function onWindowResize() {
 }
 
 function animate() {
-  
-// Desktop: allow moving model when Alt + drag
-let isMouseDragging = false;
-let lastMousePos = new THREE.Vector2();
-renderer.domElement.addEventListener('mousedown', (e) => {
+  // Desktop: allow moving model when Alt + drag
+  let isMouseDragging = false;
+  let lastMousePos = new THREE.Vector2();
+  renderer.domElement.addEventListener('mousedown', (e) => {
     if (e.altKey) {
-        isMouseDragging = true;
-        lastMousePos.set(e.clientX, e.clientY);
-        controls.enabled = false;
+      isMouseDragging = true;
+      lastMousePos.set(e.clientX, e.clientY);
+      controls.enabled = false;
     }
-});
-renderer.domElement.addEventListener('mousemove', (e) => {
+  });
+  renderer.domElement.addEventListener('mousemove', (e) => {
     if (isMouseDragging && selectedObject) {
-        const deltaX = (e.clientX - lastMousePos.x) / window.innerWidth;
-        const deltaY = (e.clientY - lastMousePos.y) / window.innerHeight;
-        // move on XZ plane
-        selectedObject.position.x += deltaX * 10 * MOVE_SENSITIVITY;
-        selectedObject.position.z -= deltaY * 10 * MOVE_SENSITIVITY;
-        lastMousePos.set(e.clientX, e.clientY);
+      const deltaX = (e.clientX - lastMousePos.x) / window.innerWidth;
+      const deltaY = (e.clientY - lastMousePos.y) / window.innerHeight;
+      // move on XZ plane
+      selectedObject.position.x += deltaX * 10 * MOVE_SENSITIVITY;
+      selectedObject.position.z -= deltaY * 10 * MOVE_SENSITIVITY;
+      lastMousePos.set(e.clientX, e.clientY);
     }
-});
-renderer.domElement.addEventListener('mouseup', (e) => {
+  });
+  renderer.domElement.addEventListener('mouseup', (e) => {
     if (isMouseDragging) {
-        isMouseDragging = false;
-        controls.enabled = true;
+      isMouseDragging = false;
+      controls.enabled = true;
     }
-});
+  });
 
-renderer.setAnimationLoop(render);
+  renderer.setAnimationLoop(render);
 }
 
 function render() {
@@ -950,12 +960,13 @@ window.addEventListener('error', (e) => {
 
 console.log(`
 ===========================================
-AR/VR Scene Initialized
+AR/VR Scene Initialized with Chat Integration
 ===========================================
 • Play Area: ${PLAY_AREA_RADIUS * 2}m diameter (${PLAY_AREA_RADIUS}m radius)
 • Meta Quest 2 Controls: Fully Enabled
 • Teleport System: Active
 • Dual Controller Manipulation: Active
+• AR Chat Overlay: Integrated
 • Max Far Plane: 200m
 ===========================================
 `);
