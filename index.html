@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AR Med - Pulmão 3D</title>
+  <meta name="description" content="AR Med - Visualização 3D e AR do pulmão com chat especializado.">
+  <!-- Tailwind CSS via CDN -->
+  <script defer src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css">
+  <!-- Import map para resolver módulos ESM de Three.js -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-900 text-slate-100 h-screen overflow-hidden">
+  <div id="app" class="flex h-screen">
+    <!-- Área 3D -->
+    <main class="relative flex-1">
+      <div id="canvas-container" class="w-full h-full"></div>
+
+      <!-- Barra superior -->
+      <div class="absolute top-4 left-4 right-4 flex items-center gap-2">
+        <div class="px-3 py-2 rounded bg-slate-800/70 backdrop-blur border border-slate-700 text-sm">
+          <span class="font-semibold">AR Med</span> · Visualização 3D/AR do pulmão
+        </div>
+        <div class="ml-auto flex gap-2">
+          <button id="resetCameraBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Resetar câmera</button>
+          <button id="toggleAxesBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Linhas (eixos)</button>
+          <button id="mouseModeBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">Modo Mouse</button>
+          <!-- O botão AR será injetado aqui -->
+          <div id="arButtonContainer"></div>
+        </div>
+      </div>
+
+      <!-- Instruções para AR -->
+      <div id="arInstructions" class="absolute bottom-4 left-4 right-4 px-4 py-3 rounded bg-slate-800/90 backdrop-blur border border-slate-700 text-sm text-center hidden">
+        <p>📱 O modelo 3D do pulmão aparecerá automaticamente à sua frente</p>
+        <p class="text-xs mt-1 text-slate-400">Use o botão "Resetar câmera" para reposicionar o modelo</p>
+      </div>
+    </main>
+
+    <!-- Painel de chat -->
+    <aside class="w-[380px] max-w-[90vw] border-l border-slate-800 bg-slate-900/90 backdrop-blur p-4 flex flex-col gap-3">
+      <div>
+        <h1 class="text-lg font-semibold">Assistente Pulmonar</h1>
+        <p class="text-xs text-slate-300">Especializado em pulmão e suas patologias.</p>
+      </div>
+
+      <div id="chatMessages" class="flex-1 overflow-auto space-y-3 pr-1 custom-scroll"></div>
+
+      <form id="chatForm" class="flex gap-2">
+        <input id="chatInput" type="text" placeholder="Pergunte sobre pulmão e patologias..." class="flex-1 px-3 py-2 rounded bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500" required />
+        
+        <button id="recordBtn" type="button" class="px-3 py-2 rounded bg-red-600 hover:bg-red-500 text-white mr-2" title="Falar">
+          🎤 Falar
+        </button>
+        <button id="sendBtn" type="submit" class="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white">Enviar</button>
+      <div id="recordContainer" class="ml-2"></div></form>
+    </aside>
+  </div>
+
+  <script type="module" src="main.js"></script>
+  <script defer src="chat.js"></script>
+
+<script>
+// move the record button into the form once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  const container = document.getElementById('recordContainer');
+  const sendBtn = document.getElementById('sendBtn');
+  if (container && window.recordBtn) {
+    container.appendChild(window.recordBtn);
+  }
+
+  // Mostra instruções AR quando a sessão começar
+  const arInstructions = document.getElementById('arInstructions');
+  if (arInstructions) {
+    // Este código será executado quando o AR iniciar
+    const showARInstructions = () => {
+      arInstructions.classList.remove('hidden');
+      setTimeout(() => {
+        arInstructions.classList.add('hidden');
+      }, 8000); // Remove instruções após 8 segundos
+    };
+
+    // Escuta o evento personalizado de início de sessão XR
+    window.addEventListener('xrsessionstart', showARInstructions);
+    
+    // Também escuta mudanças no renderer (fallback)
+    const checkARSession = setInterval(() => {
+      const canvas = document.querySelector('#canvas-container canvas');
+      if (canvas && canvas.classList.contains('xr-presenting')) {
+        showARInstructions();
+        clearInterval(checkARSession);
+      }
+    }, 500);
+    
+    // Para após 10 segundos para economizar recursos
+    setTimeout(() => clearInterval(checkARSession), 10000);
+  }
+});
+</script>
+
+</body>
+</html>
