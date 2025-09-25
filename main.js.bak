@@ -312,7 +312,7 @@ function init() {
   const arButton = ARButton.createButton(renderer, {
     requiredFeatures: ['hit-test'],
     optionalFeatures: ['dom-overlay', 'dom-overlay-for-handheld-ar', 'hand-tracking', 'layers'],
-    domOverlay: { root: document.getElementById('xrOverlay') }
+    domOverlay: { root: document.body }
   });
   document.getElementById('arButtonContainer').appendChild(arButton);
 
@@ -758,9 +758,6 @@ function resetCamera() {
 }
 
 function onXRSessionStart() {
-  // Ensure XR DOM overlay (chat/controls) is visible when AR session starts
-  try { const xrOverlayEl = document.getElementById('xrOverlay'); if (xrOverlayEl) { xrOverlayEl.style.display = 'flex'; xrOverlayEl.setAttribute('aria-hidden','false'); } } catch(e) { console.warn('xrOverlay show failed', e); }
-
   console.log('AR/VR Session iniciada');
   controls.enabled = false;
   isModelPlaced = false;
@@ -840,9 +837,6 @@ function showARInstructions() {
 }
 
 function onXRSessionEnd() {
-  // Hide XR DOM overlay when AR session ends
-  try { const xrOverlayEl = document.getElementById('xrOverlay'); if (xrOverlayEl) { xrOverlayEl.style.display = 'none'; xrOverlayEl.setAttribute('aria-hidden','true'); } } catch(e) { console.warn('xrOverlay hide failed', e); }
-
   console.log('AR/VR Session finalizada');
   controls.enabled = true;
   group.visible = true;
